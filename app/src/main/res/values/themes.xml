@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.helloworld" parent="Theme.Material3.DayNight.NoActionBar" />
+    <!-- Base application theme. Compose drives the actual UI colors; this XML
+         theme only needs to provide a no-action-bar, full-bleed surface for the
+         camera preview and AR overlay. -->
+    <style name="Theme.WaveFrom" parent="Theme.Material3.DayNight.NoActionBar" />
 </resources>

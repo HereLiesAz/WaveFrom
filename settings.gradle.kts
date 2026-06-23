@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "helloworld"
+rootProject.name = "WaveFrom"
 include(":app")

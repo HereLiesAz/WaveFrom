@@ -1,8 +1,9 @@
 // Top-level build file. Add common build configuration that should apply
-// to all sub-projects here. The Android Gradle Plugin and Kotlin plugins
-// are declared once with `apply false` so the `:app` module can `apply`
-// them with the same version.
+// to all sub-projects here. Plugins are declared once with `apply false`
+// so the `:app` module can `apply` them with the same version. Versions are
+// resolved from the `gradle/libs.versions.toml` catalog.
 plugins {
-    id("com.android.application") version "8.7.3" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.compose) apply false
 }

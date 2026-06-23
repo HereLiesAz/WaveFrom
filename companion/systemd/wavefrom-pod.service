@@ -1,0 +1,16 @@
+[Unit]
+Description=WaveFrom RF sensor pod
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Adjust WorkingDirectory to where you cloned the repo on the Pi, and set --host
+# to your phone's IP (or leave the broadcast default to reach any phone on the LAN).
+WorkingDirectory=/opt/wavefrom/companion
+ExecStart=/usr/bin/python3 -m wavefrom_pod --backend simulator --rate 10
+Restart=on-failure
+RestartSec=3
+User=pi
+
+[Install]
+WantedBy=multi-user.target
