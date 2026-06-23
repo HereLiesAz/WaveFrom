@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Base application theme. Compose drives the actual UI colors; this XML
-         theme only needs to provide a no-action-bar, full-bleed surface for the
-         camera preview and AR overlay. -->
-    <style name="Theme.WaveFrom" parent="Theme.Material3.DayNight.NoActionBar" />
+         theme only needs to provide a no-action-bar, dark, full-bleed window for
+         the camera preview and AR overlay. A platform parent is used so the app
+         doesn't depend on the Material Components (View) library. -->
+    <style name="Theme.WaveFrom" parent="android:Theme.Material.NoActionBar" />
 </resources>
