@@ -1,0 +1,5 @@
+# The simulator backend and transport use only the Python standard library.
+# Hardware backends (not yet implemented) will add their own deps, e.g.:
+#   pyrtlsdr      # RTL-SDR / KrakenSDR IQ capture
+#   numpy         # array DSP (MUSIC / correlation DF)
+#   pybluez       # BLE

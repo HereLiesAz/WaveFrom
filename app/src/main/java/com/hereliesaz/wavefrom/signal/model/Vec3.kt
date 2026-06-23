@@ -1,0 +1,19 @@
+package com.hereliesaz.wavefrom.signal.model
+
+import kotlin.math.sqrt
+
+/**
+ * A point or vector in the AR world frame (metres). Used for motion-aided
+ * localization where an emitter is resolved to an actual 3D position.
+ */
+data class Vec3(val x: Float, val y: Float, val z: Float) {
+    operator fun plus(o: Vec3) = Vec3(x + o.x, y + o.y, z + o.z)
+    operator fun minus(o: Vec3) = Vec3(x - o.x, y - o.y, z - o.z)
+    operator fun times(s: Float) = Vec3(x * s, y * s, z * s)
+
+    fun length(): Float = sqrt(x * x + y * y + z * z)
+
+    companion object {
+        val ZERO = Vec3(0f, 0f, 0f)
+    }
+}

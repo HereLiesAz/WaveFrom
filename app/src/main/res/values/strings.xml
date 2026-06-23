@@ -1,4 +1,12 @@
 <resources>
-    <string name="app_name">HelloWorld</string>
-    <string name="hello_world">Hello, World!</string>
+    <string name="app_name">WaveFrom</string>
+
+    <!-- Permission rationale -->
+    <string name="perm_title">WaveFrom needs a few permissions</string>
+    <string name="perm_rationale">To visualize nearby radio sources over the camera, WaveFrom uses the camera plus Wi-Fi, Bluetooth and cellular scanning. Location access is required by Android to return Wi-Fi/Bluetooth scan results — WaveFrom does not track or upload your location.</string>
+    <string name="perm_grant">Grant permissions</string>
+    <string name="perm_denied">Permissions are required to scan for radio sources.</string>
+
+    <!-- HUD -->
+    <string name="direction_unknown">direction unknown</string>
 </resources>
