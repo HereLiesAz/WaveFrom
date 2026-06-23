@@ -35,7 +35,8 @@ object PathLoss {
         band: SignalBand,
         pathLossExponent: Double = DEFAULT_EXPONENT,
     ): Float? {
-        if (powerDbm >= 0f || powerDbm < -127f) return null
+        // Allow weak signals: LTE RSRP reaches ~-140 dBm and sensitive SDRs lower.
+        if (powerDbm >= 0f || powerDbm < -150f) return null
         val ref = refPowerAt1m(band)
         val distance = 10.0.pow((ref - powerDbm) / (10.0 * pathLossExponent))
         return distance.coerceIn(0.1, 500.0).toFloat()

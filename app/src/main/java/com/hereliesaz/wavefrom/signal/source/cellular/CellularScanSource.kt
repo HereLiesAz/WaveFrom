@@ -62,25 +62,26 @@ class CellularScanSource(private val context: Context) : SignalSource {
     }
 
     private fun toDetection(info: CellInfo, now: Long): Detection? {
+        // Cell identity fields return CellInfo.UNAVAILABLE (Int.MAX_VALUE) when
+        // out of service or location is denied; drop those so they don't all
+        // merge into one junk track.
         val (band, dbm, key, label) = when (info) {
-            is CellInfoLte -> Quad(
-                SignalBand.CELL_MID,
-                info.cellSignalStrength.dbm,
-                "lte-${info.cellIdentity.ci}-${info.cellIdentity.pci}",
-                "LTE pci ${info.cellIdentity.pci}",
-            )
-            is CellInfoGsm -> Quad(
-                SignalBand.CELL_LOW,
-                info.cellSignalStrength.dbm,
-                "gsm-${info.cellIdentity.cid}",
-                "GSM cid ${info.cellIdentity.cid}",
-            )
-            is CellInfoWcdma -> Quad(
-                SignalBand.CELL_MID,
-                info.cellSignalStrength.dbm,
-                "wcdma-${info.cellIdentity.cid}",
-                "WCDMA cid ${info.cellIdentity.cid}",
-            )
+            is CellInfoLte -> {
+                val ci = info.cellIdentity.ci
+                val pci = info.cellIdentity.pci
+                if (ci == CellInfo.UNAVAILABLE || pci == CellInfo.UNAVAILABLE) return null
+                Quad(SignalBand.CELL_MID, info.cellSignalStrength.dbm, "lte-$ci-$pci", "LTE pci $pci")
+            }
+            is CellInfoGsm -> {
+                val cid = info.cellIdentity.cid
+                if (cid == CellInfo.UNAVAILABLE) return null
+                Quad(SignalBand.CELL_LOW, info.cellSignalStrength.dbm, "gsm-$cid", "GSM cid $cid")
+            }
+            is CellInfoWcdma -> {
+                val cid = info.cellIdentity.cid
+                if (cid == CellInfo.UNAVAILABLE) return null
+                Quad(SignalBand.CELL_MID, info.cellSignalStrength.dbm, "wcdma-$cid", "WCDMA cid $cid")
+            }
             else -> nrDetection(info)
         } ?: return null
 

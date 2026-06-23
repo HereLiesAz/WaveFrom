@@ -13,6 +13,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.InetSocketAddress
 
 /**
  * Receives bearings from an external phased-array SDR or the Raspberry Pi
@@ -32,23 +33,29 @@ class NetworkSdrSource(private val port: Int = DEFAULT_PORT) : SignalSource {
 
     override fun detections(): Flow<Detection> = callbackFlow {
         val socket = try {
-            DatagramSocket(port)
+            // reuseAddress avoids "Address already in use" if the flow is
+            // cancelled and restarted while the port is still in TIME_WAIT.
+            DatagramSocket(null).apply {
+                reuseAddress = true
+                bind(InetSocketAddress(port))
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Could not bind UDP $port", e)
             close(e); return@callbackFlow
         }
-        socket.soTimeout = SOCKET_TIMEOUT_MS
 
         val pump = launch {
             val buf = ByteArray(64 * 1024)
             while (isActive) {
                 val packet = DatagramPacket(buf, buf.size)
                 try {
+                    // Blocks until data or socket close (awaitClose closes it,
+                    // which interrupts receive immediately — no poll timeout needed).
                     socket.receive(packet)
                 } catch (e: Exception) {
-                    if (isActive) continue else break
+                    break
                 }
-                val text = String(packet.data, packet.offset, packet.length)
+                val text = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
                 for (line in text.lineSequence()) {
                     if (line.isBlank()) continue
                     val msg = WireProtocol.decode(line) ?: continue
@@ -66,6 +73,5 @@ class NetworkSdrSource(private val port: Int = DEFAULT_PORT) : SignalSource {
     companion object {
         private const val TAG = "NetworkSdrSource"
         const val DEFAULT_PORT = 50505
-        private const val SOCKET_TIMEOUT_MS = 1_000
     }
 }

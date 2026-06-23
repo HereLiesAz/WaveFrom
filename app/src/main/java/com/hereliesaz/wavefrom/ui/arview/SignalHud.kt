@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -23,8 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hereliesaz.wavefrom.ar.sensor.DeviceOrientation
@@ -104,8 +103,17 @@ private fun BearingMarker(track: Track, ambiguous: Boolean, x: Float, y: Float) 
     val radiusDp = ((track.smoothedPowerDbm + 90f) / 60f).coerceIn(0f, 1f) * 14f + 8f
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.offset {
-            IntOffset((x - 60).roundToInt(), (y - radiusDp).roundToInt())
+        // Measure the marker and place it centered on (x, y) in pixels, converting
+        // the dp dot radius to px so it stays correct at any screen density.
+        modifier = Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val radiusPx = radiusDp.dp.toPx()
+            layout(placeable.width, placeable.height) {
+                placeable.placeRelative(
+                    (x - placeable.width / 2f).roundToInt(),
+                    (y - radiusPx / 2f).roundToInt(),
+                )
+            }
         },
     ) {
         Box(

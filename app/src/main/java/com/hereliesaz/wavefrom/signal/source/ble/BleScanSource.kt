@@ -81,6 +81,10 @@ class BleScanSource(private val context: Context) : SignalSource {
         } catch (e: SecurityException) {
             Log.w(TAG, "Missing BLUETOOTH_SCAN permission", e)
             close(e); return@callbackFlow
+        } catch (e: IllegalStateException) {
+            // Bluetooth turned off concurrently with the scan start.
+            Log.w(TAG, "Bluetooth is disabled or unavailable", e)
+            close(e); return@callbackFlow
         }
 
         awaitClose {

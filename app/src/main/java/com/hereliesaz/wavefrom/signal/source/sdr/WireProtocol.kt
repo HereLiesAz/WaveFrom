@@ -35,7 +35,10 @@ object WireProtocol {
                 elevationDeg = if (json.has("elevationDeg") && !json.isNull("elevationDeg"))
                     json.optDouble("elevationDeg").toFloat() else null,
                 confidence = json.optDouble("confidence", 0.5).toFloat(),
-                label = json.optString("label").takeIf { it.isNotBlank() },
+                // optString returns the literal "null" for an explicit JSON
+                // null, so guard with isNull to avoid showing "null" in the HUD.
+                label = if (json.has("label") && !json.isNull("label"))
+                    json.optString("label").takeIf { it.isNotBlank() } else null,
                 timestampMs = ts,
             )
             "heartbeat" -> SdrMessage.Heartbeat(

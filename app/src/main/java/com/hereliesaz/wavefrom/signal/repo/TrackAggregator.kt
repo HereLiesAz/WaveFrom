@@ -6,8 +6,9 @@ import com.hereliesaz.wavefrom.signal.model.Track
 /**
  * Folds a stream of [Detection]s into stable [Track]s: de-duplicates by
  * [Detection.trackId], EMA-smooths received power, and expires tracks not seen
- * recently. Pure logic, single-threaded by contract (the repository collects on
- * one coroutine) — no synchronization needed.
+ * recently. The repository collects on a single coroutine, but detections can
+ * originate on different dispatchers (e.g. NetworkSdrSource on IO), so the
+ * mutating methods are @Synchronized to guarantee memory visibility.
  */
 class TrackAggregator(
     private val emaAlpha: Float = 0.3f,
@@ -16,6 +17,7 @@ class TrackAggregator(
     private val tracks = LinkedHashMap<String, Track>()
 
     /** Apply one detection and return the current (pruned) track list. */
+    @Synchronized
     fun apply(detection: Detection): List<Track> {
         val existing = tracks[detection.trackId]
         val smoothed = if (existing == null) detection.powerDbm
@@ -37,6 +39,7 @@ class TrackAggregator(
     }
 
     /** Prune stale tracks relative to [now] and return what remains. */
+    @Synchronized
     fun snapshot(now: Long): List<Track> {
         tracks.entries.removeAll { now - it.value.lastSeenMs > expiryMs }
         return tracks.values.sortedByDescending { it.smoothedPowerDbm }

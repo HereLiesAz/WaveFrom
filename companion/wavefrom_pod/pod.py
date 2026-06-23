@@ -21,12 +21,17 @@ def run(
     backend.start()
     try:
         while True:
-            for bearing in backend.poll():
-                transport.send_line(bearing.to_json())
-            now = time.time()
-            if now - last_hb >= heartbeat_secs:
-                transport.send_line(heartbeat(pod_id, backend.antenna_count))
-                last_hb = now
-            time.sleep(interval)
+            start = time.time()
+            try:
+                for bearing in backend.poll():
+                    transport.send_line(bearing.to_json())
+                if start - last_hb >= heartbeat_secs:
+                    transport.send_line(heartbeat(pod_id, backend.antenna_count))
+                    last_hb = start
+            except OSError as e:
+                # Transient network error (e.g. Wi-Fi reconnect) — fail soft.
+                print(f"send error: {e}")
+            # Subtract work time so the loop holds rate_hz instead of drifting slower.
+            time.sleep(max(0.0, interval - (time.time() - start)))
     finally:
         backend.stop()
