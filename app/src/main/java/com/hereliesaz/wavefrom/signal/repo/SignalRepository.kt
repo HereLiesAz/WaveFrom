@@ -1,12 +1,16 @@
 package com.hereliesaz.wavefrom.signal.repo
 
 import android.content.Context
+import com.hereliesaz.wavefrom.signal.localize.MotionAidedLocalizer
+import com.hereliesaz.wavefrom.signal.localize.PassthroughLocalizer
 import com.hereliesaz.wavefrom.signal.model.Detection
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.source.SignalSource
 import com.hereliesaz.wavefrom.signal.source.ble.BleScanSource
 import com.hereliesaz.wavefrom.signal.source.cellular.CellularScanSource
 import com.hereliesaz.wavefrom.signal.source.debug.FakeBearingSource
+import com.hereliesaz.wavefrom.signal.source.sdr.NetworkSdrSource
+import com.hereliesaz.wavefrom.signal.source.wifi.WifiRttSource
 import com.hereliesaz.wavefrom.signal.source.wifi.WifiScanSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +34,7 @@ class SignalRepository(
     private val sources: List<SignalSource>,
     scope: CoroutineScope,
     private val aggregator: TrackAggregator = TrackAggregator(),
+    private val localizer: MotionAidedLocalizer = PassthroughLocalizer(),
 ) {
     private sealed interface Input {
         data class Det(val detection: Detection) : Input
@@ -48,7 +53,12 @@ class SignalRepository(
             *sources.map { src ->
                 src.detections()
                     .catch { /* fail soft: a dead source never kills the merge */ }
-                    .map<Detection, Input> { Input.Det(it) }
+                    .map<Detection, Input> { det ->
+                        // Tier-2 upgrade: motion-aided localizer may resolve a 3D
+                        // position from accumulated motion; otherwise unchanged.
+                        val refined = localizer.refine(det)?.let { det.copy(direction = it) } ?: det
+                        Input.Det(refined)
+                    }
             }.toTypedArray(),
             ticker,
         ).scan(emptyList<Track>()) { _, input ->
@@ -69,8 +79,12 @@ class SignalRepository(
         fun defaultSources(context: Context, includeSimulated: Boolean): List<SignalSource> =
             buildList {
                 add(WifiScanSource(context))
+                add(WifiRttSource(context))     // true FTM ranging where supported
                 add(BleScanSource(context))
                 add(CellularScanSource(context))
+                // Listens for the Raspberry Pi pod / external SDR, which broadcasts
+                // bearings on the LAN by default — zero-config on the same network.
+                add(NetworkSdrSource())
                 if (includeSimulated) add(FakeBearingSource())
             }
     }

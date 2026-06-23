@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.hereliesaz.wavefrom.BuildConfig
 import com.hereliesaz.wavefrom.ar.sensor.DeviceOrientation
 import com.hereliesaz.wavefrom.ar.sensor.HeadingProvider
+import com.hereliesaz.wavefrom.signal.localize.SyntheticApertureLocalizer
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.repo.SignalRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,9 +21,17 @@ import kotlinx.coroutines.flow.stateIn
  */
 class ArViewModel(app: Application) : AndroidViewModel(app) {
 
+    /**
+     * Tier-2 localizer. Fed device poses by the ARCore renderer (Phase 2); until
+     * a pose stream with real translation exists it stays inert and tracks remain
+     * RSSI-only. Held here so the same instance receives both poses and detections.
+     */
+    val localizer = SyntheticApertureLocalizer()
+
     private val repository = SignalRepository(
         sources = SignalRepository.defaultSources(app, includeSimulated = BuildConfig.DEBUG),
         scope = viewModelScope,
+        localizer = localizer,
     )
 
     val tracks: StateFlow<List<Track>> = repository.tracks

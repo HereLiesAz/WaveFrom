@@ -12,6 +12,8 @@ data class Vec3(val x: Float, val y: Float, val z: Float) {
     operator fun times(s: Float) = Vec3(x * s, y * s, z * s)
 
     fun length(): Float = sqrt(x * x + y * y + z * z)
+    fun dot(o: Vec3): Float = x * o.x + y * o.y + z * o.z
+    fun distanceTo(o: Vec3): Float = (this - o).length()
 
     companion object {
         val ZERO = Vec3(0f, 0f, 0f)
