@@ -76,6 +76,8 @@ fun SignalHud(
             drawCircle(Color.White.copy(alpha = 0.2f), radius = 48f, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(2f))
         }
 
+        val now = System.currentTimeMillis()
+
         tracks.forEach { track ->
             val bearing = track.bearingOrNull() ?: return@forEach
             // Only an external SDR reports azimuth in its array frame; everything
@@ -97,17 +99,45 @@ fun SignalHud(
                 widthPx = widthPx,
                 heightPx = heightPx,
             ) ?: return@forEach
-            BearingMarker(track, bearing.ambiguous, point.x, point.y)
+            BearingMarker(track, bearing.ambiguous, point.x, point.y, stalenessAlpha(track.ageMs(now)))
         }
 
         val rssiTracks = tracks.filter { it.direction is Direction.RssiOnly }
         if (rssiTracks.isNotEmpty()) {
             NearbyStrip(
                 rssiTracks,
+                now,
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
             )
         }
     }
+}
+
+/**
+ * Opacity for a track of the given age. Solid while fresh, then fading toward (not
+ * to) zero as it nears the aggregator's ~15 s expiry, so the user sees a signal
+ * going stale rather than vanishing without warning.
+ */
+private fun stalenessAlpha(ageMs: Long): Float {
+    val fadeStart = 5_000f
+    val fadeEnd = 13_000f
+    return when {
+        ageMs <= fadeStart -> 1f
+        ageMs >= fadeEnd -> 0.25f
+        else -> 1f - 0.75f * ((ageMs - fadeStart) / (fadeEnd - fadeStart))
+    }
+}
+
+/**
+ * An honest distance label: a confidence-widened range, not a single crisp number,
+ * because RSSI→distance is fuzzy. High confidence collapses to "~X m"; low
+ * confidence shows a wide "~lo–hi m" bracket.
+ */
+private fun fuzzyDistanceLabel(distanceM: Float, confidence: Float): String {
+    val halfWidth = 1f - confidence.coerceIn(0.1f, 1f)
+    val lo = (distanceM * (1f - halfWidth)).coerceAtLeast(0.1f).roundToInt()
+    val hi = (distanceM * (1f + halfWidth)).roundToInt()
+    return if (hi - lo <= 1) "~$hi m" else "~$lo–$hi m"
 }
 
 private data class Bearing(val azimuth: Float, val elevation: Float, val ambiguous: Boolean)
@@ -119,7 +149,7 @@ private fun Track.bearingOrNull(): Bearing? = when (val d = direction) {
 }
 
 @Composable
-private fun BearingMarker(track: Track, ambiguous: Boolean, x: Float, y: Float) {
+private fun BearingMarker(track: Track, ambiguous: Boolean, x: Float, y: Float, staleAlpha: Float) {
     val color = Color(BandColor.argb(track.band))
     // Strong signals render larger.
     val radiusDp = ((track.smoothedPowerDbm + 90f) / 60f).coerceIn(0f, 1f) * 14f + 8f
@@ -142,24 +172,24 @@ private fun BearingMarker(track: Track, ambiguous: Boolean, x: Float, y: Float) 
             Modifier
                 .size(radiusDp.dp)
                 .clip(CircleShape)
-                .background(color.copy(alpha = if (ambiguous) 0.5f else 0.9f)),
+                .background(color.copy(alpha = (if (ambiguous) 0.5f else 0.9f) * staleAlpha)),
         )
         Text(
             text = track.identity.label,
-            color = Color.White,
+            color = Color.White.copy(alpha = staleAlpha),
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
         )
         Text(
             text = "${track.smoothedPowerDbm.roundToInt()} dBm",
-            color = color,
+            color = color.copy(alpha = staleAlpha),
             fontSize = 10.sp,
         )
     }
 }
 
 @Composable
-private fun NearbyStrip(tracks: List<Track>, modifier: Modifier = Modifier) {
+private fun NearbyStrip(tracks: List<Track>, now: Long, modifier: Modifier = Modifier) {
     Column(
         modifier
             .background(Color.Black.copy(alpha = 0.45f))
@@ -178,29 +208,31 @@ private fun NearbyStrip(tracks: List<Track>, modifier: Modifier = Modifier) {
                 .padding(top = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            tracks.take(24).forEach { NearbyChip(it) }
+            tracks.take(24).forEach { NearbyChip(it, stalenessAlpha(it.ageMs(now))) }
         }
     }
 }
 
 @Composable
-private fun NearbyChip(track: Track) {
+private fun NearbyChip(track: Track, staleAlpha: Float) {
     val color = Color(BandColor.argb(track.band))
-    val distance = (track.direction as? Direction.RssiOnly)?.estimatedDistanceM
+    val rssi = track.direction as? Direction.RssiOnly
+    val label = rssi?.estimatedDistanceM?.let { fuzzyDistanceLabel(it, rssi.confidence) }
+        ?: track.band.displayName
     Row(
         Modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.08f))
+            .background(Color.White.copy(alpha = 0.08f * staleAlpha))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Box(Modifier.size(8.dp).clip(CircleShape).background(color.copy(alpha = staleAlpha)))
         Column {
-            Text(track.identity.label, color = Color.White, fontSize = 11.sp)
+            Text(track.identity.label, color = Color.White.copy(alpha = staleAlpha), fontSize = 11.sp)
             Text(
-                text = distance?.let { "~${it.roundToInt()} m" } ?: track.band.displayName,
-                color = Color.White.copy(alpha = 0.6f),
+                text = label,
+                color = Color.White.copy(alpha = 0.6f * staleAlpha),
                 fontSize = 9.sp,
             )
         }
