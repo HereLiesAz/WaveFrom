@@ -53,6 +53,13 @@ android {
         compose = true
         buildConfig = true
     }
+
+    testOptions {
+        unitTests {
+            // Robolectric + Compose-under-Robolectric need merged Android resources.
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -85,7 +92,17 @@ dependencies {
     testImplementation(libs.junit)
     // Real org.json so JSONObject works in JVM unit tests (android.jar only stubs it).
     testImplementation("org.json:json:20240303")
+    // Robolectric + Compose-under-Robolectric: run Android-framework + Compose UI tests
+    // on the JVM (no emulator). The BOM pins the ui-test artifact versions.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
