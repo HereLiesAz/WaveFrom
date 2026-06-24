@@ -27,18 +27,22 @@ data class CellKey(val radio: String, val mcc: Int, val mnc: Int, val lac: Int, 
 class CellLocationResolver(
     private val apiKey: String = BuildConfig.OPENCELLID_API_KEY,
     private val endpoint: String = "https://opencellid.org/cell/get",
-) {
+) : TowerResolver {
     private val cache = ConcurrentHashMap<String, LatLon>()
     private val misses = ConcurrentHashMap.newKeySet<String>()
 
     /** True when an API key is configured; gates the network path. */
-    val enabled: Boolean get() = apiKey.isNotBlank()
+    override val enabled: Boolean get() = apiKey.isNotBlank()
 
-    suspend fun resolve(key: CellKey): LatLon? {
+    override suspend fun resolve(key: CellKey): LatLon? {
         if (!enabled) return null
         cache[key.cacheKey]?.let { return it }
         if (key.cacheKey in misses) return null
-        val loc = fetch(key)?.let { parse(it) }
+        // Only cache a *definitive* miss (a real response that parsed to not-found).
+        // A transient failure (timeout, 5xx, rate limit) returns null without caching
+        // so the tower can resolve on a later poll once the network recovers.
+        val body = fetch(key) ?: return null
+        val loc = parse(body)
         if (loc != null) cache[key.cacheKey] = loc else misses.add(key.cacheKey)
         return loc
     }

@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -146,16 +147,34 @@ private fun projectForArcore(track: Track, eye: Vec3): Track {
  * conversions resolve to true). No-op once seeded or while the compass is unreliable.
  */
 private fun maybeSeedNorth(sessionYawDeg: Float, sensor: DeviceOrientation) {
-    if (CalibrationConfig.arcoreSeeded) return
-    if (sensor.accuracy < SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM) return
-    val cfg = CalibrationConfig.state
-    val trueHeading = FrameMath.magneticToTrue(
-        sensor.azimuthDeg,
-        cfg.declinationDeg,
-        cfg.manualNorthNudgeDeg,
-    )
-    CalibrationConfig.sessionToTrueNorthDeg = FrameMath.seedSessionToTrue(sessionYawDeg, trueHeading)
+    val offset = computeNorthSeed(
+        alreadySeeded = CalibrationConfig.arcoreSeeded,
+        accuracy = sensor.accuracy,
+        sessionYawDeg = sessionYawDeg,
+        sensorAzimuthDeg = sensor.azimuthDeg,
+        cfg = CalibrationConfig.state,
+    ) ?: return
+    CalibrationConfig.sessionToTrueNorthDeg = offset
     CalibrationConfig.arcoreSeeded = true
+}
+
+/**
+ * Pure seed decision: the offset that maps ARCore's session yaw to true north, or null
+ * to skip (already seeded, or the compass is below MEDIUM accuracy). Touches no globals,
+ * so the guard + solve are unit-testable without a live ARCore session.
+ */
+@VisibleForTesting
+internal fun computeNorthSeed(
+    alreadySeeded: Boolean,
+    accuracy: Int,
+    sessionYawDeg: Float,
+    sensorAzimuthDeg: Float,
+    cfg: CalibrationConfig.State,
+): Float? {
+    if (alreadySeeded) return null
+    if (accuracy < SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM) return null
+    val trueHeading = FrameMath.magneticToTrue(sensorAzimuthDeg, cfg.declinationDeg, cfg.manualNorthNudgeDeg)
+    return FrameMath.seedSessionToTrue(sessionYawDeg, trueHeading)
 }
 
 private fun Context.findActivity(): Activity? {

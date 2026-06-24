@@ -1,6 +1,7 @@
 package com.hereliesaz.wavefrom.ui.arview
 
 import android.hardware.SensorManager
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,16 +26,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hereliesaz.wavefrom.BuildConfig
 import com.hereliesaz.wavefrom.ar.frame.BearingFrame
 import com.hereliesaz.wavefrom.ar.frame.CalibrationConfig
 import com.hereliesaz.wavefrom.ar.frame.FrameMath
 import com.hereliesaz.wavefrom.ar.sensor.DeviceOrientation
-import com.hereliesaz.wavefrom.ar.sensor.ScreenProjection
-import com.hereliesaz.wavefrom.signal.model.Direction
-import com.hereliesaz.wavefrom.signal.model.SourceType
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.physics.PathLoss
-import kotlin.math.abs
+import com.hereliesaz.wavefrom.signal.source.cellular.CellDiagnostics
 
 /**
  * Shared overlay controls (spectrum waterfall toggle + calibration) drawn on top of
@@ -78,6 +78,16 @@ fun HudControls(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
             )
         }
+        if (BuildConfig.DEBUG) {
+            val lastResolve by CellDiagnostics.lastResolve.collectAsStateWithLifecycle()
+            DiagnosticsOverlay(
+                orientation = orientation,
+                tracks = tracks,
+                headingFrame = headingFrame,
+                lastResolve = lastResolve,
+                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+            )
+        }
     }
 }
 
@@ -87,7 +97,8 @@ fun HudControls(
  * pins the centred SDR track to the crosshair.
  */
 @Composable
-private fun CalibrationPanel(
+@VisibleForTesting
+internal fun CalibrationPanel(
     orientation: DeviceOrientation,
     tracks: List<Track>,
     headingFrame: BearingFrame,
@@ -99,7 +110,7 @@ private fun CalibrationPanel(
 
     val cfg = CalibrationConfig.state
     val headingTrue = FrameMath.headingToTrue(headingFrame, orientation.azimuthDeg, cfg)
-    val centeredSdr = centeredSdrTrack(tracks, headingTrue, cfg.sdrArrayOffsetDeg)
+    val centeredSdr = CalibrationActions.centeredSdrTrack(tracks, headingTrue, cfg.sdrArrayOffsetDeg)
     val compassPoor = orientation.accuracy <= SensorManager.SENSOR_STATUS_ACCURACY_LOW
 
     Column(
@@ -155,8 +166,7 @@ private fun CalibrationPanel(
         // tap to solve the array offset that pins it to the crosshair.
         FilledTonalButton(
             onClick = {
-                centeredSdr?.let { (_, rawAz) ->
-                    val solved = FrameMath.solveArrayOffset(rawAz, headingTrue)
+                CalibrationActions.solveAlignOffset(centeredSdr, headingTrue)?.let { solved ->
                     CalibrationConfig.sdrArrayOffsetDeg = solved
                     sdrOffset = solved
                 }
@@ -170,19 +180,3 @@ private fun CalibrationPanel(
         }
     }
 }
-
-/**
- * The external-SDR track whose calibrated bearing is nearest the crosshair (current
- * heading), paired with its raw array azimuth. Null if none is on screen.
- */
-private fun centeredSdrTrack(
-    tracks: List<Track>,
-    headingTrue: Float,
-    arrayOffsetDeg: Float,
-): Pair<Track, Float>? =
-    tracks.asSequence()
-        .filter { it.sourceType == SourceType.EXTERNAL_SDR }
-        .mapNotNull { t -> (t.direction as? Direction.TrueBearing)?.let { t to it.azimuthDeg } }
-        .minByOrNull { (_, rawAz) ->
-            abs(ScreenProjection.normalizeDeg(FrameMath.sdrArrayToTrue(rawAz, arrayOffsetDeg) - headingTrue))
-        }

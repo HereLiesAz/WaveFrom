@@ -59,10 +59,11 @@ jobs:
         run: |
           set +e
           export BUILD_NUMBER=$(git rev-list --count HEAD)
-          
-          # Build the APK
-          ./gradlew assembleDebug -PversionBuild=$BUILD_NUMBER --build-cache > build.log 2>&1
-          
+
+          # Run the JVM + Robolectric unit tests, then build the APK. Tests gate the
+          # build, so a logic regression both fails CI and is reported to Jules below.
+          ./gradlew testDebugUnitTest assembleDebug -PversionBuild=$BUILD_NUMBER --build-cache > build.log 2>&1
+
           EXIT_CODE=$?
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
           cat build.log
@@ -180,3 +181,68 @@ jobs:
                --notes "Auto-build from commit $GITHUB_SHA" \
                --target $GITHUB_SHA
           fi
+
+  # --------------------------------------------------------------------------
+  # Instrumented smoke test on an emulator. Deliberately decoupled from
+  # build-and-release (no needs:) so emulator flake can never block an APK
+  # release. Runs only on PRs and manual dispatch, not on every push.
+  # --------------------------------------------------------------------------
+  instrumented:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        api-level: [30]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ matrix.api-level }}
+
+      - name: Create AVD and warm cache
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: echo "AVD warmed"
+
+      - name: Run instrumented smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: ./gradlew connectedDebugAndroidTest
