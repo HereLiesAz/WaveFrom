@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hereliesaz.wavefrom.BuildConfig
 import com.hereliesaz.wavefrom.ar.frame.BearingFrame
 import com.hereliesaz.wavefrom.ar.frame.CalibrationConfig
@@ -78,11 +79,12 @@ fun HudControls(
             )
         }
         if (BuildConfig.DEBUG) {
+            val lastResolve by CellDiagnostics.lastResolve.collectAsStateWithLifecycle()
             DiagnosticsOverlay(
                 orientation = orientation,
                 tracks = tracks,
                 headingFrame = headingFrame,
-                lastResolve = CellDiagnostics.lastResolve,
+                lastResolve = lastResolve,
                 modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
             )
         }

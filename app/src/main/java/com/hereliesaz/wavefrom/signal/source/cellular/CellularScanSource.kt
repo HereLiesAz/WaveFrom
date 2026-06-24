@@ -37,15 +37,20 @@ import kotlinx.coroutines.launch
  * database position; otherwise it stays RssiOnly.
  */
 class CellularScanSource(
-    private val context: Context,
+    context: Context,
     private val towerResolver: TowerResolver = CellLocationResolver(),
-    private val locationProvider: LocationProvider = LocationProvider { context.lastKnownLatLonDefault() },
+    locationProvider: LocationProvider? = null,
 ) : SignalSource {
 
     override val sourceType = SourceType.CELLULAR
 
+    // Hold only the application context so a long-lived source never pins an Activity.
+    private val appContext = context.applicationContext
+    private val locationProvider: LocationProvider =
+        locationProvider ?: LocationProvider { appContext.lastKnownLatLonDefault() }
+
     private val telephony: TelephonyManager? =
-        context.applicationContext.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        appContext.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
 
     override fun isAvailable(): Boolean =
         telephony?.phoneType != null && telephony.phoneType != TelephonyManager.PHONE_TYPE_NONE

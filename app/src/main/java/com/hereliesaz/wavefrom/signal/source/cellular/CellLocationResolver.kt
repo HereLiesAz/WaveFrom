@@ -38,7 +38,11 @@ class CellLocationResolver(
         if (!enabled) return null
         cache[key.cacheKey]?.let { return it }
         if (key.cacheKey in misses) return null
-        val loc = fetch(key)?.let { parse(it) }
+        // Only cache a *definitive* miss (a real response that parsed to not-found).
+        // A transient failure (timeout, 5xx, rate limit) returns null without caching
+        // so the tower can resolve on a later poll once the network recovers.
+        val body = fetch(key) ?: return null
+        val loc = parse(body)
         if (loc != null) cache[key.cacheKey] = loc else misses.add(key.cacheKey)
         return loc
     }

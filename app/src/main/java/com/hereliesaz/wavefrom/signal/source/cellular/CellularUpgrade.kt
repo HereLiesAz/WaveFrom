@@ -3,6 +3,7 @@ package com.hereliesaz.wavefrom.signal.source.cellular
 import androidx.annotation.VisibleForTesting
 import com.hereliesaz.wavefrom.signal.model.Direction
 import com.hereliesaz.wavefrom.signal.physics.GeoBearing
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Resolves a cell tower's position. Implemented by [CellLocationResolver]; faked in tests. */
 interface TowerResolver {
@@ -21,10 +22,12 @@ fun interface LocationProvider {
 /** The most recent successful tower resolve, for the debug diagnostics overlay. */
 data class CellResolveSnapshot(val cellKey: String, val tower: LatLon, val bearingDeg: Float)
 
-/** Debug-only breadcrumb of the last cell→tower resolve. Never read in release builds. */
+/**
+ * Debug-only breadcrumb of the last cell→tower resolve. A [MutableStateFlow] so the
+ * diagnostics overlay recomposes when a new tower resolves. Never read in release builds.
+ */
 object CellDiagnostics {
-    @Volatile
-    var lastResolve: CellResolveSnapshot? = null
+    val lastResolve = MutableStateFlow<CellResolveSnapshot?>(null)
 }
 
 /**
@@ -45,6 +48,6 @@ internal suspend fun upgradeToTrueBearing(
     val me = locationProvider.lastKnownLatLon() ?: return null
     val az = GeoBearing.azimuthDeg(me.lat, me.lon, tower.lat, tower.lon)
     // Debug breadcrumb; the return value stays a pure function of the inputs.
-    CellDiagnostics.lastResolve = CellResolveSnapshot(key.cacheKey, tower, az)
+    CellDiagnostics.lastResolve.value = CellResolveSnapshot(key.cacheKey, tower, az)
     return Direction.TrueBearing(azimuthDeg = az, elevationDeg = null, confidence = confidence)
 }

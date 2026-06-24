@@ -15,7 +15,7 @@ offsets, the ARCore seed flag, the centered SDR pick, and the last cell→tower 
 ## 1. Align to crosshair
 
 1. Identify a known external-SDR emitter and connect the SDR/pod so its bearing appears
-   as a marker (`SourceType.SDR`).
+   as a marker (`SourceType.EXTERNAL_SDR`).
 2. Point the phone's crosshair (screen center) directly at the real emitter.
 3. Confirm the overlay lists that emitter as **centered SDR** with a non-zero raw azimuth,
    and open the **Calibrate** panel — the button reads `Align "<label>" to crosshair`.
