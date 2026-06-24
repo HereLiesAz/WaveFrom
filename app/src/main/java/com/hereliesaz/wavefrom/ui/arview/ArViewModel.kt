@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.SensorManager
 import android.location.LocationManager
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -47,7 +48,10 @@ class ArViewModel(app: Application) : AndroidViewModel(app) {
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5_000),
-                DeviceOrientation(0f, 0f, 0f),
+                // Mark the placeholder UNRELIABLE so the ARCore north-seed guard
+                // (which requires accuracy ≥ MEDIUM) ignores it until a real
+                // compass sample arrives.
+                DeviceOrientation(0f, 0f, 0f, SensorManager.SENSOR_STATUS_UNRELIABLE),
             )
 
     init {
