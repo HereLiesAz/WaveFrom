@@ -61,7 +61,7 @@ object Trilateration {
             }
         }
 
-        val p = solve3x3(ata, atb) ?: solvePlanar(rows, rhs, a0) ?: return null
+        val p = solve3x3(ata, atb) ?: solvePlanar(rows, rhs, weights, a0) ?: return null
         val pos = Vec3(p[0], p[1], p[2])
 
         val residual = rmsResidual(samples, pos)
@@ -116,14 +116,20 @@ object Trilateration {
      * Fallback when anchors are coplanar (e.g. the phone moved in a horizontal
      * plane): solve x,y in 2D and fix z to the anchor mean height.
      */
-    private fun solvePlanar(rows: List<FloatArray>, rhs: List<Float>, a0: Vec3): FloatArray? {
+    private fun solvePlanar(
+        rows: List<FloatArray>,
+        rhs: List<Float>,
+        weights: List<Float>,
+        a0: Vec3,
+    ): FloatArray? {
         val ata = Array(2) { FloatArray(2) }
         val atb = FloatArray(2)
         for (i in rows.indices) {
             val row = rows[i]
+            val w = weights[i]
             for (r in 0..1) {
-                atb[r] += row[r] * rhs[i]
-                for (c in 0..1) ata[r][c] += row[r] * row[c]
+                atb[r] += w * row[r] * rhs[i]
+                for (c in 0..1) ata[r][c] += w * row[r] * row[c]
             }
         }
         val det = ata[0][0] * ata[1][1] - ata[0][1] * ata[1][0]

@@ -78,6 +78,9 @@ class WifiRttSource(private val context: Context) : SignalSource {
                         })
                     } catch (e: SecurityException) {
                         Log.w(TAG, "Missing permission for RTT ranging", e)
+                    } catch (e: IllegalStateException) {
+                        // Wi-Fi or location disabled mid-session.
+                        Log.w(TAG, "RTT not ready (Wi-Fi/Location disabled?)", e)
                     }
                 }
                 delay(RANGE_INTERVAL_MS)
@@ -104,7 +107,7 @@ class WifiRttSource(private val context: Context) : SignalSource {
             powerDbm = r.rssi.toFloat(),
             direction = Direction.RssiOnly(
                 estimatedDistanceM = distanceM,
-                distanceConfidence = 0.9f, // FTM range is far more trustworthy than RSSI
+                confidence = 0.9f, // FTM range is far more trustworthy than RSSI
             ),
             identity = Identity(
                 key = mac,

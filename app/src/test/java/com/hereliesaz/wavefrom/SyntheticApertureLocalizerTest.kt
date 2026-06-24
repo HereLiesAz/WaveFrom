@@ -20,7 +20,7 @@ class SyntheticApertureLocalizerTest {
         frequencyHz = 5_500_000_000L,
         powerDbm = -60f,
         // Simulate a Wi-Fi-RTT range: RssiOnly carries a trusted distance.
-        direction = Direction.RssiOnly(estimatedDistanceM = rangeM, distanceConfidence = 0.9f),
+        direction = Direction.RssiOnly(estimatedDistanceM = rangeM, confidence = 0.9f),
         identity = Identity(key = "ap-1", label = "AP"),
         timestampMs = 0,
     )

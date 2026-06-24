@@ -36,6 +36,11 @@ class SyntheticApertureLocalizer(
         val pose = latestPose ?: return null
         val (range, weight) = rangeAndWeight(detection) ?: return null
 
+        // Bound the number of tracked emitters; evict the oldest (LRU-ish) so a
+        // long session can't grow the map without limit.
+        if (!samples.containsKey(detection.trackId) && samples.size >= MAX_TRACKS) {
+            samples.keys.firstOrNull()?.let { samples.remove(it) }
+        }
         val buf = samples.getOrPut(detection.trackId) { ArrayDeque() }
         // Only keep a new sample if the device actually moved since the last one,
         // otherwise a stationary device floods the buffer with duplicates.
@@ -53,7 +58,7 @@ class SyntheticApertureLocalizer(
     /** Range to use for this sample, and how much to trust it. */
     private fun rangeAndWeight(detection: Detection): Pair<Float, Float>? {
         val rssiRange = (detection.direction as? Direction.RssiOnly)?.estimatedDistanceM
-        val rssiConf = (detection.direction as? Direction.RssiOnly)?.distanceConfidence
+        val rssiConf = (detection.direction as? Direction.RssiOnly)?.confidence
         val range = rssiRange
             ?: PathLoss.estimateDistanceM(detection.powerDbm, detection.band)
             ?: return null
@@ -63,5 +68,6 @@ class SyntheticApertureLocalizer(
 
     private companion object {
         const val MIN_STEP_M = 0.15f
+        const val MAX_TRACKS = 128
     }
 }
