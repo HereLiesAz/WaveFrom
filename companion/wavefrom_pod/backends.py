@@ -71,20 +71,39 @@ class SimulatorBackend(SensorBackend):
 
 
 class RtlSdrBackend(SensorBackend):
-    """Stub: a coherent RTL-SDR array (e.g. KrakenSDR) doing MUSIC/correlation DF.
+    """A coherent RTL-SDR pair/array (e.g. KrakenSDR) doing correlation DF.
 
-    Would use ``pyrtlsdr`` / the Kraken DAQ to read IQ from N coherent
-    receivers, run cross-correlation or MUSIC across the array, and emit one
-    ``Bearing`` per detected signal with real azimuth (and elevation for a 2D
-    array). This is the highest-fidelity path and the closest analog to QuadRF.
+    With ``pyrtlsdr`` + numpy this reads IQ from coherent receivers, computes the
+    inter-element phase via cross-correlation and converts it to a bearing. The
+    IQ→bearing math ([bearing_from_iq]) is testable without hardware; [poll]
+    needs the radios and raises until they're wired up.
     """
 
     name = "rtlsdr"
+    antenna_count = 2
+
+    def __init__(self, spacing_m: float = 0.5, freq_hz: float = 433_000_000.0) -> None:
+        self.spacing_m = spacing_m
+        self.freq_hz = freq_hz
+
+    @staticmethod
+    def bearing_from_iq(iq_a, iq_b, freq_hz: float, spacing_m: float) -> tuple[float, float]:
+        """(theta, mirror) bearing from two coherent IQ streams. No hardware needed."""
+        from .dsp import doa_from_phase, interferometric_phase
+
+        phase = interferometric_phase(iq_a, iq_b)
+        return doa_from_phase(phase, spacing_m, freq_hz)
 
     def poll(self) -> list[Bearing]:  # pragma: no cover - hardware stub
-        raise NotImplementedError(
-            "RtlSdrBackend requires a coherent RTL-SDR array and DSP; not yet implemented."
-        )
+        try:
+            import rtlsdr  # noqa: F401  (pyrtlsdr) - optional hardware dep
+        except ImportError as e:
+            raise NotImplementedError(
+                "RtlSdrBackend needs pyrtlsdr + a coherent RTL-SDR array."
+            ) from e
+        # TODO: read coherent IQ buffers, detect signals per bin, and for each
+        # call bearing_from_iq(...) to emit a Bearing.
+        raise NotImplementedError("Coherent RTL-SDR capture loop not yet implemented.")
 
 
 class WifiCsiBackend(SensorBackend):

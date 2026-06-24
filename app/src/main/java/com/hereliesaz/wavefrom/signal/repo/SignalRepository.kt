@@ -9,7 +9,9 @@ import com.hereliesaz.wavefrom.signal.source.SignalSource
 import com.hereliesaz.wavefrom.signal.source.ble.BleScanSource
 import com.hereliesaz.wavefrom.signal.source.cellular.CellularScanSource
 import com.hereliesaz.wavefrom.signal.source.debug.FakeBearingSource
+import com.hereliesaz.wavefrom.signal.source.dualradio.DualRadioSource
 import com.hereliesaz.wavefrom.signal.source.sdr.NetworkSdrSource
+import com.hereliesaz.wavefrom.signal.source.sdr.UsbSdrSource
 import com.hereliesaz.wavefrom.signal.source.wifi.WifiRttSource
 import com.hereliesaz.wavefrom.signal.source.wifi.WifiScanSource
 import kotlinx.coroutines.CoroutineScope
@@ -85,6 +87,9 @@ class SignalRepository(
                 // Listens for the Raspberry Pi pod / external SDR, which broadcasts
                 // bearings on the LAN by default — zero-config on the same network.
                 add(NetworkSdrSource())
+                // USB OTG paths report availability now; emit once DSP lands.
+                add(UsbSdrSource(context))
+                add(DualRadioSource(context))
                 if (includeSimulated) add(FakeBearingSource())
             }
     }
