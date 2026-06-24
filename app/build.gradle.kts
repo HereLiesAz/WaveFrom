@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,6 +10,16 @@ android {
     namespace = "com.hereliesaz.wavefrom"
     compileSdk = 35
 
+    // OpenCellID key for cell-tower geolocation, from local.properties
+    // (opencellid.api.key) or the OPENCELLID_API_KEY env var. Blank when unset, in
+    // which case cellular detections stay RssiOnly — the feature is opt-in.
+    val openCellIdKey: String = run {
+        val props = Properties()
+        rootProject.file("local.properties").takeIf { it.exists() }
+            ?.inputStream()?.use { props.load(it) }
+        props.getProperty("opencellid.api.key") ?: System.getenv("OPENCELLID_API_KEY") ?: ""
+    }
+
     defaultConfig {
         applicationId = "com.hereliesaz.wavefrom"
         minSdk = 26
@@ -15,6 +27,7 @@ android {
         versionCode = (project.findProperty("versionBuild") as String?)?.toIntOrNull() ?: 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "OPENCELLID_API_KEY", "\"$openCellIdKey\"")
     }
 
     buildTypes {
@@ -70,6 +83,8 @@ dependencies {
     implementation(libs.google.arcore)
 
     testImplementation(libs.junit)
+    // Real org.json so JSONObject works in JVM unit tests (android.jar only stubs it).
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

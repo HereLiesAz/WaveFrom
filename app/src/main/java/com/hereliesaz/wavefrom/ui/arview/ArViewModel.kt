@@ -1,9 +1,16 @@
 package com.hereliesaz.wavefrom.ui.arview
 
+import android.Manifest
 import android.app.Application
+import android.content.Context
+import android.content.pm.PackageManager
+import android.hardware.SensorManager
+import android.location.LocationManager
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hereliesaz.wavefrom.BuildConfig
+import com.hereliesaz.wavefrom.ar.frame.DeclinationProvider
 import com.hereliesaz.wavefrom.ar.sensor.DeviceOrientation
 import com.hereliesaz.wavefrom.ar.sensor.HeadingProvider
 import com.hereliesaz.wavefrom.signal.localize.SyntheticApertureLocalizer
@@ -41,6 +48,34 @@ class ArViewModel(app: Application) : AndroidViewModel(app) {
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5_000),
-                DeviceOrientation(0f, 0f, 0f),
+                // Mark the placeholder UNRELIABLE so the ARCore north-seed guard
+                // (which requires accuracy ≥ MEDIUM) ignores it until a real
+                // compass sample arrives.
+                DeviceOrientation(0f, 0f, 0f, SensorManager.SENSOR_STATUS_UNRELIABLE),
             )
+
+    init {
+        updateDeclination(app)
+    }
+
+    /**
+     * Seed magnetic declination from the last known location so the sensor heading
+     * converts magnetic→true. Best-effort: if location permission is missing or no
+     * fix exists, declination stays at its manual default (the north-nudge slider).
+     */
+    private fun updateDeclination(ctx: Context) {
+        val granted = ContextCompat.checkSelfPermission(
+            ctx,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) return
+        val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+        val loc = try {
+            lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        } catch (e: SecurityException) {
+            null
+        } ?: return
+        DeclinationProvider().update(loc.latitude, loc.longitude, loc.altitude, System.currentTimeMillis())
+    }
 }

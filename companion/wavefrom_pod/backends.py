@@ -399,6 +399,57 @@ class BleBackend(SensorBackend):
         )
 
 
+class QuadRfBackend(SensorBackend):
+    """Template for integrating a vendor DoA daemon (e.g. QuadRF on a Pi 5).
+
+    This is the canonical example of WaveFrom's vendor-integration contract: a
+    backend is the *only* glue needed to add new hardware. The phone never learns
+    anything vendor-specific — it consumes the same ``bearing``/``spectrum`` JSON
+    (see :mod:`wavefrom_pod.protocol` and the phone's ``WireProtocol``) regardless
+    of source. So a vendor either:
+
+      1. emits the WaveFrom JSON contract directly from their own daemon (then no
+         backend is needed — just point the pod's transport at the phone), or
+      2. exposes a vendor stream/API that a ``SensorBackend`` subclass like this one
+         reads and maps into :class:`Bearing` / :class:`Spectrum`.
+
+    To make this real, implement :meth:`start`/:meth:`poll` against the QuadRF DoA
+    output. The shape is identical to :class:`KrakenSdrBackend`: read the daemon's
+    detections each poll and return one :class:`Bearing` per emitter, e.g.::
+
+        return [
+            Bearing(
+                track_id=f"qrf-{i}",
+                freq_hz=int(det.freq_hz),
+                power_dbm=float(det.power_dbm),
+                azimuth_deg=float(det.azimuth_deg),
+                elevation_deg=det.elevation_deg,   # or None
+                confidence=0.8,
+                label="QuadRF DoA",
+            )
+            for i, det in enumerate(detections)
+        ]
+
+    The azimuth is relative to the array boresight; the phone's frame calibration
+    (SDR array offset) rotates it to true north, so emit the raw array azimuth here.
+    """
+
+    name = "quadrf"
+    antenna_count = 4
+
+    def __init__(self, quadrf_host: str = "127.0.0.1", quadrf_port: int = 8000, **_: object) -> None:
+        self.host = str(quadrf_host)
+        self.port = int(quadrf_port)
+        self._conn = None
+
+    def poll(self) -> list[Bearing]:  # pragma: no cover - vendor hardware stub
+        raise NotImplementedError(
+            "QuadRfBackend is a template — implement start()/poll() against your "
+            f"QuadRF DoA daemon (configured for {self.host}:{self.port}). See the "
+            "class docstring and KrakenSdrBackend for the pattern."
+        )
+
+
 #: Registry used by the CLI to select a backend by name.
 BACKENDS: dict[str, type[SensorBackend]] = {
     SimulatorBackend.name: SimulatorBackend,
@@ -406,4 +457,5 @@ BACKENDS: dict[str, type[SensorBackend]] = {
     KrakenSdrBackend.name: KrakenSdrBackend,
     WifiCsiBackend.name: WifiCsiBackend,
     BleBackend.name: BleBackend,
+    QuadRfBackend.name: QuadRfBackend,
 }

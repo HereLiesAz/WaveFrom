@@ -60,6 +60,7 @@ Run as a service with `systemd/wavefrom-pod.service`.
 | `krakensdr` | ✅ working   | coherent 5-ch KrakenSDR via Heimdall DAQ → beamforming DoA → true bearings |
 | `wificsi`   | ✅ working   | Nexmon-CSI NIC → per-frame antenna×subcarrier matrix → beamforming DoA |
 | `ble`       | 🚧 stub     | Bluetooth 5.1 AoA |
+| `quadrf`    | 🚧 template | vendor DoA daemon (e.g. QuadRF on a Pi 5) — worked example for adding hardware |
 
 The DSP (`wavefrom_pod/dsp.py`) is pure-Python (Bartlett beamformer, FFT) and runs
 without numpy; install **numpy** for fast covariance + high-resolution MUSIC, and
@@ -77,8 +78,25 @@ without numpy; install **numpy** for fast covariance + high-resolution MUSIC, an
 > see the notes in `heimdall.py` / `nexmon.py` and validate against your install.
 > Antenna geometry (`--radius-m`, CSI `spacing_m`) must match your hardware.
 
-Add a backend by subclassing `SensorBackend` in `wavefrom_pod/backends.py` and
-registering it in `BACKENDS`.
+### Adding a vendor backend (the firmware-control decision)
+
+**The phone never learns anything vendor-specific.** It consumes only the
+`bearing`/`spectrum`/`heartbeat` JSON contract above, so integrating any SDR — QuadRF,
+a custom array, a vendor DoA daemon — is purely pod-side. Two paths:
+
+1. **Vendor emits the WaveFrom contract directly.** If the vendor's daemon can write
+   the JSON above to a UDP socket, no backend is needed — point it at the phone (or
+   relay through `transport.py`). Nothing to write on the phone.
+2. **A `SensorBackend` adapts the vendor stream.** When the vendor speaks its own
+   format, subclass `SensorBackend` in `wavefrom_pod/backends.py`, implement
+   `start()`/`poll()` to read the vendor data and return `Bearing`/`Spectrum`, and
+   register it in `BACKENDS`. That subclass is the *entire* integration — this is the
+   same shape as `KrakenSdrBackend` (Heimdall IQ) and `WifiCsiBackend` (Nexmon CSI).
+
+`QuadRfBackend` is a fully-documented template for path 2 (run with `--backend quadrf
+--quadrf-host … --quadrf-port …`); copy it and fill in `poll()`. Emit the **raw
+array-relative azimuth** — the phone's frame calibration (SDR array offset) rotates it
+to true north, so the backend should not try to absolute-reference it.
 
 ## Tests
 
