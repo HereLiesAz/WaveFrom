@@ -38,6 +38,8 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
     <!-- USB host: direct dongle / SDR attach to the phone (Phase 4). Optional. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <!-- ARCore is optional: the app falls back to the sensor overlay without it. -->
+    <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -48,6 +50,8 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.WaveFrom">
+        <!-- "optional": installable on non-AR devices; we check at runtime. -->
+        <meta-data android:name="com.google.ar.core" android:value="optional" />
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
