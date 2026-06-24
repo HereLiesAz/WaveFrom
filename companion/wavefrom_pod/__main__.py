@@ -19,9 +19,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backend", choices=sorted(BACKENDS), default="simulator")
     parser.add_argument("--pod-id", default="pi-pod")
     parser.add_argument("--rate", type=float, default=10.0, help="updates per second")
+    # Radio params (used by the relevant backends; others ignore via **kwargs).
+    parser.add_argument("--center-freq", type=float, default=433_000_000.0)
+    parser.add_argument("--sample-rate", type=float, default=2_400_000.0)
+    parser.add_argument("--gain", default="auto")
+    parser.add_argument("--nfft", type=int, default=1024)
+    parser.add_argument("--radius-m", type=float, default=0.17, help="KrakenSDR UCA radius")
+    parser.add_argument("--heimdall-host", default="127.0.0.1")
+    parser.add_argument("--heimdall-port", type=int, default=5000)
+    parser.add_argument("--csi-port", type=int, default=5500, help="Nexmon CSI UDP port")
     args = parser.parse_args(argv)
 
-    backend = BACKENDS[args.backend]()
+    radio_kwargs = dict(
+        center_freq=args.center_freq,
+        sample_rate=args.sample_rate,
+        gain=args.gain,
+        nfft=args.nfft,
+        radius_m=args.radius_m,
+        heimdall_host=args.heimdall_host,
+        heimdall_port=args.heimdall_port,
+        udp_port=args.csi_port,
+        freq_hz=args.center_freq,
+    )
+    try:
+        backend = BACKENDS[args.backend](**radio_kwargs)
+    except TypeError:
+        backend = BACKENDS[args.backend]()
     transport = UdpTransport(args.host, args.port)
     print(f"WaveFrom pod '{args.pod_id}' [{backend.name}] -> {args.host}:{args.port} @ {args.rate} Hz")
     try:
