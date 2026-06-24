@@ -28,6 +28,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--heimdall-host", default="127.0.0.1")
     parser.add_argument("--heimdall-port", type=int, default=5000)
     parser.add_argument("--csi-port", type=int, default=5500, help="Nexmon CSI UDP port")
+    parser.add_argument("--quadrf-host", default="127.0.0.1", help="QuadRF DoA daemon host")
+    parser.add_argument("--quadrf-port", type=int, default=8000, help="QuadRF DoA daemon port")
     args = parser.parse_args(argv)
 
     radio_kwargs = dict(
@@ -40,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
         heimdall_port=args.heimdall_port,
         udp_port=args.csi_port,
         freq_hz=args.center_freq,
+        quadrf_host=args.quadrf_host,
+        quadrf_port=args.quadrf_port,
     )
     try:
         backend = BACKENDS[args.backend](**radio_kwargs)

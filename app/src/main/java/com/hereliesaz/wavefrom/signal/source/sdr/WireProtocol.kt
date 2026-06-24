@@ -60,7 +60,15 @@ object WireProtocol {
         }
     }
 
-    /** Map a bearing message to the unified [Detection] model. */
+    /**
+     * Map a bearing message to the unified [Detection] model.
+     *
+     * The wire `azimuthDeg` is relative to the SDR's antenna-array boresight, not
+     * true north. It is carried through unchanged here; the overlay rotates it to
+     * true north using the live `CalibrationConfig.sdrArrayOffsetDeg`
+     * (`BearingFrame.SDR_ARRAY`), so a single calibration value reflows every
+     * already-aggregated track without re-decoding the stream.
+     */
     fun toDetection(b: SdrMessage.Bearing): Detection {
         val band = SignalBand.fromFrequencyHz(b.frequencyHz)
         return Detection(
