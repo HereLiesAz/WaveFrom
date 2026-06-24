@@ -3,7 +3,7 @@ import json
 import unittest
 
 from wavefrom_pod.backends import SimulatorBackend
-from wavefrom_pod.protocol import Bearing, heartbeat
+from wavefrom_pod.protocol import Bearing, Spectrum, heartbeat
 
 
 class ProtocolTest(unittest.TestCase):
@@ -25,6 +25,19 @@ class ProtocolTest(unittest.TestCase):
         d = json.loads(heartbeat("pod", 4, ts_ms=1))
         self.assertEqual(d["type"], "heartbeat")
         self.assertEqual(d["antennaCount"], 4)
+
+    def test_spectrum_json_shape(self):
+        s = Spectrum(start_hz=int(2.4e9), bin_hz=int(1e6), powers_dbm=[-100.0, -50.0, -90.0])
+        d = json.loads(s.to_json(ts_ms=1))
+        self.assertEqual(d["type"], "spectrum")
+        self.assertEqual(d["startHz"], int(2.4e9))
+        self.assertEqual(len(d["powersDbm"]), 3)
+
+    def test_simulator_produces_spectrum(self):
+        s = SimulatorBackend().spectrum()
+        self.assertEqual(len(s.powers_dbm), 128)
+        # The two synthetic peaks rise above the noise floor.
+        self.assertTrue(max(s.powers_dbm) > -80.0)
 
     def test_simulator_emits_requested_count(self):
         sim = SimulatorBackend(count=3)

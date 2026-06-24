@@ -23,8 +23,15 @@ object PathLoss {
         SignalBand.UNKNOWN -> -50.0
     }
 
-    /** Path-loss exponent: 2 = free space, ~3 = light indoor, ~4 = obstructed. */
-    private const val DEFAULT_EXPONENT = 2.7
+    /**
+     * Live-tunable path-loss exponent (2 = free space, ~3 = light indoor,
+     * ~4 = obstructed). Exposed for the in-app calibration control so the user
+     * can fit the distance estimate to their environment.
+     */
+    object Config {
+        @Volatile
+        var exponent: Double = 2.7
+    }
 
     /**
      * Estimate distance in metres from a power reading. Returns null for clearly
@@ -33,7 +40,7 @@ object PathLoss {
     fun estimateDistanceM(
         powerDbm: Float,
         band: SignalBand,
-        pathLossExponent: Double = DEFAULT_EXPONENT,
+        pathLossExponent: Double = Config.exponent,
     ): Float? {
         // Allow weak signals: LTE RSRP reaches ~-140 dBm and sensitive SDRs lower.
         if (powerDbm >= 0f || powerDbm < -150f) return null

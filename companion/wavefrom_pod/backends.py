@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 
-from .protocol import Bearing
+from .protocol import Bearing, Spectrum
 
 
 class SensorBackend(ABC):
@@ -33,6 +33,10 @@ class SensorBackend(ABC):
     @abstractmethod
     def poll(self) -> list[Bearing]:
         """Return the currently detected emitters as bearings."""
+
+    def spectrum(self) -> Spectrum | None:
+        """Optional power-per-bin snapshot for the waterfall. None if unsupported."""
+        return None
 
 
 class SimulatorBackend(SensorBackend):
@@ -68,6 +72,20 @@ class SimulatorBackend(SensorBackend):
             )
         self._t += 1
         return out
+
+    def spectrum(self) -> Spectrum:
+        """Synthetic 128-bin spectrum: noise floor plus two drifting peaks."""
+        bins = 128
+        start_hz = int(2.4e9)
+        bin_hz = int(1e6)
+        peaks = ((30 + (self._t % 40), 45.0), (90 - (self._t % 30), 35.0))
+        powers = []
+        for i in range(bins):
+            p = -108.0 + 4.0 * math.sin(i * 0.35 + self._t * 0.1)
+            for center, amp in peaks:
+                p = max(p, -108.0 + amp * math.exp(-((i - center) ** 2) / 8.0))
+            powers.append(p)
+        return Spectrum(start_hz, bin_hz, powers)
 
 
 class RtlSdrBackend(SensorBackend):

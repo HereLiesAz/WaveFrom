@@ -41,6 +41,16 @@ object WireProtocol {
                     json.optString("label").takeIf { it.isNotBlank() } else null,
                 timestampMs = ts,
             )
+            "spectrum" -> {
+                val arr = json.optJSONArray("powersDbm") ?: return null
+                val powers = FloatArray(arr.length()) { arr.optDouble(it, -120.0).toFloat() }
+                SdrMessage.Spectrum(
+                    startHz = json.optDouble("startHz", 0.0).toLong(),
+                    binHz = json.optDouble("binHz", 0.0).toLong(),
+                    powersDbm = powers,
+                    timestampMs = ts,
+                )
+            }
             "heartbeat" -> SdrMessage.Heartbeat(
                 podId = json.optString("podId", "pod"),
                 antennaCount = json.optInt("antennaCount", 1),

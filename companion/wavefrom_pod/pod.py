@@ -25,6 +25,9 @@ def run(
             try:
                 for bearing in backend.poll():
                     transport.send_line(bearing.to_json())
+                spectrum = backend.spectrum()
+                if spectrum is not None:
+                    transport.send_line(spectrum.to_json())
                 if start - last_hb >= heartbeat_secs:
                     transport.send_line(heartbeat(pod_id, backend.antenna_count))
                     last_hb = start
