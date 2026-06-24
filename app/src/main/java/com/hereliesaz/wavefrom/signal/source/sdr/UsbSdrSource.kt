@@ -36,7 +36,8 @@ class UsbSdrSource(
     /** True when a recognized USB SDR is plugged in over OTG. */
     override fun isAvailable(): Boolean = UsbDeviceCatalog.attachedSdrs(context).isNotEmpty()
 
-    override fun detections(): Flow<Detection> = flow {
+    // Explicit type arg: the builder emits no Detection, so T can't be inferred.
+    override fun detections(): Flow<Detection> = flow<Detection> {
         if (!isAvailable()) return@flow
         val client = RtlTcpClient(host, port)
         try {
