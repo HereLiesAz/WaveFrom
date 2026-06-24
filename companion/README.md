@@ -55,10 +55,27 @@ Run as a service with `systemd/wavefrom-pod.service`.
 
 | name        | status      | what it does |
 |-------------|-------------|--------------|
-| `simulator` | ✅ working   | synthetic orbiting emitters, no RF hardware |
-| `rtlsdr`    | 🚧 stub     | coherent RTL-SDR / KrakenSDR array, MUSIC/correlation DF |
-| `wificsi`   | 🚧 stub     | Nexmon-CSI Wi-Fi NIC, CSI-based DF (the case Android can't do) |
+| `simulator` | ✅ working   | synthetic orbiting emitters + spectrum, no RF hardware |
+| `rtlsdr`    | ✅ working   | single RTL-SDR dongle → real power spectrum (waterfall); no DoA (1 antenna) |
+| `krakensdr` | ✅ working   | coherent 5-ch KrakenSDR via Heimdall DAQ → beamforming DoA → true bearings |
+| `wificsi`   | ✅ working   | Nexmon-CSI NIC → per-frame antenna×subcarrier matrix → beamforming DoA |
 | `ble`       | 🚧 stub     | Bluetooth 5.1 AoA |
+
+The DSP (`wavefrom_pod/dsp.py`) is pure-Python (Bartlett beamformer, FFT) and runs
+without numpy; install **numpy** for fast covariance + high-resolution MUSIC, and
+**pyrtlsdr** for the RTL-SDR/Heimdall paths (`pip install -r requirements.txt`).
+
+### Hardware setup
+- **RTL-SDR:** `python3 -m wavefrom_pod --backend rtlsdr --center-freq 433e6 --sample-rate 2.4e6`
+- **KrakenSDR:** run the [Heimdall DAQ](https://github.com/krakenrf/heimdall_daq_fw)
+  (serves coherent IQ on TCP :5000), then `--backend krakensdr` (`--radius-m` to match
+  your array). Sanity-check against [krakensdr_doa](https://github.com/krakenrf/krakensdr_doa) :8080.
+- **WiFi CSI:** flash [nexmon_csi](https://github.com/seemoo-lab/nexmon_csi) on a supported
+  NIC streaming CSI UDP to :5500, then `--backend wificsi`.
+
+> The Heimdall IQ-frame and Nexmon CSI packet layouts vary by firmware version —
+> see the notes in `heimdall.py` / `nexmon.py` and validate against your install.
+> Antenna geometry (`--radius-m`, CSI `spacing_m`) must match your hardware.
 
 Add a backend by subclassing `SensorBackend` in `wavefrom_pod/backends.py` and
 registering it in `BACKENDS`.
@@ -68,3 +85,5 @@ registering it in `BACKENDS`.
 ```bash
 cd companion && python3 -m unittest discover -s tests -v
 ```
+DSP tests (spectrum, Bartlett DoA for ULA/UCA, Heimdall/CSI parsing) run without
+numpy or hardware.
