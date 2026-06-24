@@ -199,12 +199,18 @@ def bartlett_doa(
     for az in scan_deg:
         p = _quad_form(steering_vector(positions, float(az), freq_hz), r)
         spectrum.append((float(az), 10.0 * math.log10(p + 1e-12)))
-    # Local maxima (circular if scanning a full turn).
+    # Local maxima. Only wrap neighbours when the scan spans a full turn (UCA);
+    # a linear-array hemisphere scan (0..180) must not treat its ends as adjacent.
     m = len(spectrum)
+    is_circular = m > 1 and abs((spectrum[-1][0] - spectrum[0][0]) - 360.0) < 5.0
     peaks = []
     for i in range(m):
-        prev = spectrum[(i - 1) % m][1]
-        nxt = spectrum[(i + 1) % m][1]
+        if is_circular:
+            prev = spectrum[(i - 1) % m][1]
+            nxt = spectrum[(i + 1) % m][1]
+        else:
+            prev = spectrum[i - 1][1] if i > 0 else float("-inf")
+            nxt = spectrum[i + 1][1] if i < m - 1 else float("-inf")
         if spectrum[i][1] >= prev and spectrum[i][1] >= nxt:
             peaks.append(spectrum[i])
     peaks.sort(key=lambda c: c[1], reverse=True)

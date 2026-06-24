@@ -161,6 +161,8 @@ class RtlSdrBackend(SensorBackend):
 def _covariance(channels: list[list[complex]], max_snapshots: int = 512):
     """Spatial covariance across channels. numpy fast path; pure-Python (sub-
     sampled) fallback so it works without numpy."""
+    if not channels or not channels[0]:
+        return []
     try:
         import numpy as np
 
@@ -246,7 +248,8 @@ class KrakenSdrBackend(SensorBackend):
             return []
         header = heimdall.parse_header(self._recv_exact(heimdall.HEADER_SIZE))
         if header["sync_word"] != heimdall.SYNC_WORD:
-            return []
+            # Stream is out of sync; fail fast so the service can reconnect clean.
+            raise ConnectionError("Heimdall stream out of sync (invalid sync word)")
         channels = heimdall.decode_channels(header, self._recv_exact(heimdall.payload_size(header)))
         freq = float(header["rf_center_freq"])
         fs = float(header["sampling_freq"]) or 2_400_000.0
@@ -377,9 +380,10 @@ class WifiCsiBackend(SensorBackend):
                         label="WiFi CSI DoA",
                     )
                 )
-        # Bound memory: drop the oldest incomplete groups.
+        # Bound memory: drop the oldest incomplete groups. Use insertion order
+        # (dicts preserve it) — sorting by seq breaks on 16-bit wrap-around.
         if len(self._groups) > 256:
-            for seq in sorted(self._groups)[:128]:
+            for seq in list(self._groups)[:128]:
                 self._groups.pop(seq, None)
         return bearings
 
