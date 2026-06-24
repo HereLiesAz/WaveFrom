@@ -1,6 +1,7 @@
 package com.hereliesaz.wavefrom.ui.arview
 
 import android.hardware.SensorManager
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,7 +84,8 @@ fun HudControls(
  * pins the centred SDR track to the crosshair.
  */
 @Composable
-private fun CalibrationPanel(
+@VisibleForTesting
+internal fun CalibrationPanel(
     orientation: DeviceOrientation,
     tracks: List<Track>,
     headingFrame: BearingFrame,
