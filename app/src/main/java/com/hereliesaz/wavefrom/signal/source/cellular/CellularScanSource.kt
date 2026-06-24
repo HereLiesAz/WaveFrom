@@ -19,7 +19,6 @@ import com.hereliesaz.wavefrom.signal.model.Direction
 import com.hereliesaz.wavefrom.signal.model.Identity
 import com.hereliesaz.wavefrom.signal.model.SignalBand
 import com.hereliesaz.wavefrom.signal.model.SourceType
-import com.hereliesaz.wavefrom.signal.physics.GeoBearing
 import com.hereliesaz.wavefrom.signal.physics.PathLoss
 import com.hereliesaz.wavefrom.signal.source.SignalSource
 import kotlinx.coroutines.channels.awaitClose
@@ -37,14 +36,16 @@ import kotlinx.coroutines.launch
  * fix, the cell is upgraded to a [Direction.TrueBearing] pointing at the tower's
  * database position; otherwise it stays RssiOnly.
  */
-class CellularScanSource(private val context: Context) : SignalSource {
+class CellularScanSource(
+    private val context: Context,
+    private val towerResolver: TowerResolver = CellLocationResolver(),
+    private val locationProvider: LocationProvider = LocationProvider { context.lastKnownLatLonDefault() },
+) : SignalSource {
 
     override val sourceType = SourceType.CELLULAR
 
     private val telephony: TelephonyManager? =
         context.applicationContext.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-
-    private val towerResolver = CellLocationResolver()
 
     override fun isAvailable(): Boolean =
         telephony?.phoneType != null && telephony.phoneType != TelephonyManager.PHONE_TYPE_NONE
@@ -72,18 +73,8 @@ class CellularScanSource(private val context: Context) : SignalSource {
                     val key = cellKeyOf(info)
                     if (towerResolver.enabled && key != null) {
                         launch {
-                            val tower = towerResolver.resolve(key) ?: return@launch
-                            val me = lastKnownLatLon() ?: return@launch
-                            val az = GeoBearing.azimuthDeg(me.lat, me.lon, tower.lat, tower.lon)
-                            trySend(
-                                base.copy(
-                                    direction = Direction.TrueBearing(
-                                        azimuthDeg = az,
-                                        elevationDeg = null,
-                                        confidence = TOWER_CONFIDENCE,
-                                    ),
-                                ),
-                            )
+                            upgradeToTrueBearing(towerResolver, locationProvider, key, TOWER_CONFIDENCE)
+                                ?.let { trySend(base.copy(direction = it)) }
                         }
                     }
                 }
@@ -174,27 +165,27 @@ class CellularScanSource(private val context: Context) : SignalSource {
         }
     }
 
-    /** The phone's own last-known position, or null without permission / a fix. */
-    private fun lastKnownLatLon(): LatLon? {
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) return null
-        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
-        val loc = try {
-            lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-        } catch (e: SecurityException) {
-            null
-        } ?: return null
-        return LatLon(loc.latitude, loc.longitude)
-    }
-
     private companion object {
         const val TAG = "CellularScanSource"
         const val POLL_INTERVAL_MS = 5_000L
         // Tower-DB position is real but coarse (cell centroid, not the antenna).
         const val TOWER_CONFIDENCE = 0.6f
     }
+}
+
+/** The phone's own last-known position, or null without permission / a fix. */
+private fun Context.lastKnownLatLonDefault(): LatLon? {
+    val granted = ContextCompat.checkSelfPermission(
+        this,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+    ) == PackageManager.PERMISSION_GRANTED
+    if (!granted) return null
+    val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+    val loc = try {
+        lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+    } catch (e: SecurityException) {
+        null
+    } ?: return null
+    return LatLon(loc.latitude, loc.longitude)
 }
