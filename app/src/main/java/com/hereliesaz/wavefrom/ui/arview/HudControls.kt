@@ -26,12 +26,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.hereliesaz.wavefrom.BuildConfig
 import com.hereliesaz.wavefrom.ar.frame.BearingFrame
 import com.hereliesaz.wavefrom.ar.frame.CalibrationConfig
 import com.hereliesaz.wavefrom.ar.frame.FrameMath
 import com.hereliesaz.wavefrom.ar.sensor.DeviceOrientation
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.physics.PathLoss
+import com.hereliesaz.wavefrom.signal.source.cellular.CellDiagnostics
 
 /**
  * Shared overlay controls (spectrum waterfall toggle + calibration) drawn on top of
@@ -73,6 +75,15 @@ fun HudControls(
                 tracks = tracks,
                 headingFrame = headingFrame,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+            )
+        }
+        if (BuildConfig.DEBUG) {
+            DiagnosticsOverlay(
+                orientation = orientation,
+                tracks = tracks,
+                headingFrame = headingFrame,
+                lastResolve = CellDiagnostics.lastResolve,
+                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
             )
         }
     }

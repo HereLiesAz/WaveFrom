@@ -18,6 +18,15 @@ fun interface LocationProvider {
     fun lastKnownLatLon(): LatLon?
 }
 
+/** The most recent successful tower resolve, for the debug diagnostics overlay. */
+data class CellResolveSnapshot(val cellKey: String, val tower: LatLon, val bearingDeg: Float)
+
+/** Debug-only breadcrumb of the last cell→tower resolve. Never read in release builds. */
+object CellDiagnostics {
+    @Volatile
+    var lastResolve: CellResolveSnapshot? = null
+}
+
 /**
  * Pure upgrade step: turn a resolved tower position plus our own fix into the
  * [Direction.TrueBearing] to re-emit, or null when the resolver is disabled, the tower
@@ -35,5 +44,7 @@ internal suspend fun upgradeToTrueBearing(
     val tower = resolver.resolve(key) ?: return null
     val me = locationProvider.lastKnownLatLon() ?: return null
     val az = GeoBearing.azimuthDeg(me.lat, me.lon, tower.lat, tower.lon)
+    // Debug breadcrumb; the return value stays a pure function of the inputs.
+    CellDiagnostics.lastResolve = CellResolveSnapshot(key.cacheKey, tower, az)
     return Direction.TrueBearing(azimuthDeg = az, elevationDeg = null, confidence = confidence)
 }
