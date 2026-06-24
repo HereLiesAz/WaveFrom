@@ -1,5 +1,7 @@
 package com.hereliesaz.wavefrom
 
+import com.hereliesaz.wavefrom.ar.frame.BearingFrame
+import com.hereliesaz.wavefrom.ar.frame.CalibrationConfig
 import com.hereliesaz.wavefrom.ar.frame.FrameMath
 import com.hereliesaz.wavefrom.ar.sensor.ScreenProjection
 import org.junit.Assert.assertEquals
@@ -89,6 +91,21 @@ class FrameMathTest {
         val offset = FrameMath.solveArrayOffset(arrayAzimuthDeg = 80f, trueBearingDeg = 130f)
         assertEquals(50f, offset, eps)
         assertEquals(130f, FrameMath.sdrArrayToTrue(80f, offset), eps)
+    }
+
+    @Test
+    fun headingToTrueDispatchesPerFrame() {
+        val cfg = CalibrationConfig.State(
+            declinationDeg = 10f,
+            manualNorthNudgeDeg = -5f,
+            sessionToTrueNorthDeg = 30f,
+        )
+        // Magnetic: declination + nudge applied.
+        assertEquals(105f, FrameMath.headingToTrue(BearingFrame.MAGNETIC_NORTH, 100f, cfg), eps)
+        // ARCore session: session offset applied (wraps).
+        assertEquals(20f, FrameMath.headingToTrue(BearingFrame.ARCORE_SESSION, 350f, cfg), eps)
+        // Already-true frames pass through (wrapped).
+        assertEquals(100f, FrameMath.headingToTrue(BearingFrame.TRUE_NORTH, 100f, cfg), eps)
     }
 
     @Test

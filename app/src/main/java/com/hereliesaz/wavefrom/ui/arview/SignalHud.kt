@@ -26,9 +26,13 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hereliesaz.wavefrom.ar.frame.BearingFrame
+import com.hereliesaz.wavefrom.ar.frame.CalibrationConfig
+import com.hereliesaz.wavefrom.ar.frame.FrameMath
 import com.hereliesaz.wavefrom.ar.sensor.DeviceOrientation
 import com.hereliesaz.wavefrom.ar.sensor.ScreenProjection
 import com.hereliesaz.wavefrom.signal.model.Direction
+import com.hereliesaz.wavefrom.signal.model.SourceType
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.physics.BandColor
 import kotlin.math.atan
@@ -47,6 +51,8 @@ private const val HORIZONTAL_FOV_DEG = 63f
 fun SignalHud(
     tracks: List<Track>,
     orientation: DeviceOrientation,
+    headingFrame: BearingFrame,
+    targetFrame: BearingFrame,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -57,6 +63,13 @@ fun SignalHud(
             2.0 * atan(tan(Math.toRadians(HORIZONTAL_FOV_DEG / 2.0)) * (heightPx / widthPx)),
         ).toFloat()
 
+        // One atomic snapshot of the live calibration; both the heading and the SDR
+        // targets convert against the same offsets. With the default (zero) config
+        // every conversion is the identity, so behaviour matches the pre-calibration
+        // build until the user calibrates.
+        val cfg = CalibrationConfig.state
+        val headingTrue = FrameMath.headingToTrue(headingFrame, orientation.azimuthDeg, cfg)
+
         Canvas(Modifier.fillMaxSize()) {
             val c = Offset(size.width / 2f, size.height / 2f)
             drawCircle(Color.White.copy(alpha = 0.5f), radius = 6f, center = c)
@@ -65,10 +78,19 @@ fun SignalHud(
 
         tracks.forEach { track ->
             val bearing = track.bearingOrNull() ?: return@forEach
+            // Only an external SDR reports azimuth in its array frame; everything
+            // else (e.g. interferometric) is already in the heading frame, so we
+            // must not double-offset it.
+            val targetAz =
+                if (targetFrame == BearingFrame.SDR_ARRAY && track.sourceType == SourceType.EXTERNAL_SDR) {
+                    FrameMath.sdrArrayToTrue(bearing.azimuth, cfg.sdrArrayOffsetDeg)
+                } else {
+                    bearing.azimuth
+                }
             val point = ScreenProjection.project(
-                targetAzimuthDeg = bearing.azimuth,
+                targetAzimuthDeg = targetAz,
                 targetElevationDeg = bearing.elevation,
-                headingDeg = orientation.azimuthDeg,
+                headingDeg = headingTrue,
                 pitchDeg = orientation.pitchDeg,
                 horizontalFovDeg = HORIZONTAL_FOV_DEG,
                 verticalFovDeg = vFov,

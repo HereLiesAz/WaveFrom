@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hereliesaz.wavefrom.ar.arcore.ArCoreRenderer
 import com.hereliesaz.wavefrom.ar.arcore.ArCoreSessionManager
 import com.hereliesaz.wavefrom.ar.arcore.ArcoreMath
+import com.hereliesaz.wavefrom.ar.frame.BearingFrame
 import com.hereliesaz.wavefrom.ar.sensor.DeviceOrientation
 import com.hereliesaz.wavefrom.signal.localize.Pose
 import com.hereliesaz.wavefrom.signal.model.Direction
@@ -94,8 +95,20 @@ fun ArCoreScreen(viewModel: ArViewModel) {
 
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { glView }, modifier = Modifier.fillMaxSize())
-        SignalHud(tracks = arTracks, orientation = orientation, modifier = Modifier.fillMaxSize())
-        HudControls()
+        // ARCore yaw is session-relative; PR 3 seeds the session→true offset from
+        // the compass so this frame becomes true north.
+        SignalHud(
+            tracks = arTracks,
+            orientation = orientation,
+            headingFrame = BearingFrame.ARCORE_SESSION,
+            targetFrame = BearingFrame.SDR_ARRAY,
+            modifier = Modifier.fillMaxSize(),
+        )
+        HudControls(
+            orientation = orientation,
+            tracks = arTracks,
+            headingFrame = BearingFrame.ARCORE_SESSION,
+        )
     }
 }
 

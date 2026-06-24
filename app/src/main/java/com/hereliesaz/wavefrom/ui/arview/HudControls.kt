@@ -1,5 +1,6 @@
 package com.hereliesaz.wavefrom.ui.arview
 
+import android.hardware.SensorManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,14 +25,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.hereliesaz.wavefrom.ar.frame.BearingFrame
+import com.hereliesaz.wavefrom.ar.frame.CalibrationConfig
+import com.hereliesaz.wavefrom.ar.frame.FrameMath
+import com.hereliesaz.wavefrom.ar.sensor.DeviceOrientation
+import com.hereliesaz.wavefrom.ar.sensor.ScreenProjection
+import com.hereliesaz.wavefrom.signal.model.Direction
+import com.hereliesaz.wavefrom.signal.model.SourceType
+import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.physics.PathLoss
+import kotlin.math.abs
 
 /**
- * Shared overlay controls (spectrum waterfall toggle + path-loss calibration)
- * drawn on top of either the sensor or ARCore camera view.
+ * Shared overlay controls (spectrum waterfall toggle + calibration) drawn on top of
+ * either the sensor or ARCore camera view. [orientation] (with its compass accuracy)
+ * and [tracks] feed the bearing-frame calibration; [headingFrame] tells the panel
+ * which frame the device heading is in.
  */
 @Composable
-fun HudControls(modifier: Modifier = Modifier) {
+fun HudControls(
+    orientation: DeviceOrientation,
+    tracks: List<Track>,
+    headingFrame: BearingFrame,
+    modifier: Modifier = Modifier,
+) {
     var showWaterfall by remember { mutableStateOf(false) }
     var showCalibrate by remember { mutableStateOf(false) }
 
@@ -54,22 +71,52 @@ fun HudControls(modifier: Modifier = Modifier) {
             }
         }
         if (showCalibrate) {
-            CalibrationPanel(Modifier.align(Alignment.BottomEnd).padding(8.dp))
+            CalibrationPanel(
+                orientation = orientation,
+                tracks = tracks,
+                headingFrame = headingFrame,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+            )
         }
     }
 }
 
-/** Adjusts the live path-loss exponent used for RSSI→distance estimates. */
+/**
+ * Live calibration: path-loss exponent (RSSI→distance), the bearing-frame offsets
+ * (SDR array, north nudge), a compass-reliability warning, and a one-tap align that
+ * pins the centred SDR track to the crosshair.
+ */
 @Composable
-private fun CalibrationPanel(modifier: Modifier = Modifier) {
+private fun CalibrationPanel(
+    orientation: DeviceOrientation,
+    tracks: List<Track>,
+    headingFrame: BearingFrame,
+    modifier: Modifier = Modifier,
+) {
     var exponent by remember { mutableFloatStateOf(PathLoss.Config.exponent.toFloat()) }
+    var sdrOffset by remember { mutableFloatStateOf(CalibrationConfig.sdrArrayOffsetDeg) }
+    var northNudge by remember { mutableFloatStateOf(CalibrationConfig.manualNorthNudgeDeg) }
+
+    val cfg = CalibrationConfig.state
+    val headingTrue = FrameMath.headingToTrue(headingFrame, orientation.azimuthDeg, cfg)
+    val centeredSdr = centeredSdrTrack(tracks, headingTrue, cfg.sdrArrayOffsetDeg)
+    val compassPoor = orientation.accuracy <= SensorManager.SENSOR_STATUS_ACCURACY_LOW
+
     Column(
         modifier
             .clip(RoundedCornerShape(12.dp))
             .background(Color.Black.copy(alpha = 0.55f))
             .padding(12.dp)
-            .width(220.dp),
+            .width(240.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        if (compassPoor) {
+            Text(
+                "Compass unreliable — wave the phone in a figure-8",
+                color = Color(0xFFFF6E6E),
+            )
+        }
+
         Text("Path-loss exponent: ${"%.1f".format(exponent)}", color = Color.White)
         Slider(
             value = exponent,
@@ -79,9 +126,63 @@ private fun CalibrationPanel(modifier: Modifier = Modifier) {
             },
             valueRange = 2.0f..4.5f,
         )
-        Text(
-            "2 = open space · 3 = indoor · 4 = obstructed",
-            color = Color.White.copy(alpha = 0.6f),
+
+        Text("SDR array offset: ${sdrOffset.toInt()}°", color = Color.White)
+        Slider(
+            value = sdrOffset,
+            onValueChange = {
+                sdrOffset = it
+                CalibrationConfig.sdrArrayOffsetDeg = it
+            },
+            valueRange = -180f..180f,
         )
+
+        val declSource = if (cfg.declinationFromLocation) "GPS" else "manual"
+        Text(
+            "North nudge: ${northNudge.toInt()}° (decl ${"%.1f".format(cfg.declinationDeg)}° $declSource)",
+            color = Color.White,
+        )
+        Slider(
+            value = northNudge,
+            onValueChange = {
+                northNudge = it
+                CalibrationConfig.manualNorthNudgeDeg = it
+            },
+            valueRange = -30f..30f,
+        )
+
+        // One-tap: point the camera at where the centred SDR emitter really is and
+        // tap to solve the array offset that pins it to the crosshair.
+        FilledTonalButton(
+            onClick = {
+                centeredSdr?.let { (_, rawAz) ->
+                    val solved = FrameMath.solveArrayOffset(rawAz, headingTrue)
+                    CalibrationConfig.sdrArrayOffsetDeg = solved
+                    sdrOffset = solved
+                }
+            },
+            enabled = centeredSdr != null,
+        ) {
+            Text(
+                centeredSdr?.let { "Align “${it.first.identity.label}” to crosshair" }
+                    ?: "Align SDR — center a marker",
+            )
+        }
     }
 }
+
+/**
+ * The external-SDR track whose calibrated bearing is nearest the crosshair (current
+ * heading), paired with its raw array azimuth. Null if none is on screen.
+ */
+private fun centeredSdrTrack(
+    tracks: List<Track>,
+    headingTrue: Float,
+    arrayOffsetDeg: Float,
+): Pair<Track, Float>? =
+    tracks.asSequence()
+        .filter { it.sourceType == SourceType.EXTERNAL_SDR }
+        .mapNotNull { t -> (t.direction as? Direction.TrueBearing)?.let { t to it.azimuthDeg } }
+        .minByOrNull { (_, rawAz) ->
+            abs(ScreenProjection.normalizeDeg(FrameMath.sdrArrayToTrue(rawAz, arrayOffsetDeg) - headingTrue))
+        }

@@ -16,11 +16,16 @@ import kotlinx.coroutines.flow.callbackFlow
  *  - [DeviceOrientation.azimuthDeg] camera heading, 0..360 clockwise from magnetic north
  *  - [DeviceOrientation.pitchDeg]   up-tilt of the camera, +up
  *  - [DeviceOrientation.rollDeg]    device roll
+ *  - [DeviceOrientation.accuracy]   latest magnetometer accuracy (a
+ *    `SensorManager.SENSOR_STATUS_ACCURACY_*` constant). The whole true-north
+ *    calibration derives from the compass, so a low value means every bearing is
+ *    suspect — the HUD surfaces this.
  */
 data class DeviceOrientation(
     val azimuthDeg: Float,
     val pitchDeg: Float,
     val rollDeg: Float,
+    val accuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
 )
 
 class HeadingProvider(context: Context) {
@@ -35,6 +40,9 @@ class HeadingProvider(context: Context) {
         val rotation = FloatArray(9)
         val remapped = FloatArray(9)
         val angles = FloatArray(3)
+        // Updated on the same sensor thread as onSensorChanged, so a plain var is
+        // safe; it rides out on the next orientation emission.
+        var lastAccuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH
 
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
@@ -54,11 +62,14 @@ class HeadingProvider(context: Context) {
                         azimuthDeg = azimuth,
                         pitchDeg = Math.toDegrees(angles[1].toDouble()).toFloat(),
                         rollDeg = Math.toDegrees(angles[2].toDouble()).toFloat(),
+                        accuracy = lastAccuracy,
                     )
                 )
             }
 
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+                lastAccuracy = accuracy
+            }
         }
 
         sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)

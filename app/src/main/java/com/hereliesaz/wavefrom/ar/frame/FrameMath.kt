@@ -39,6 +39,20 @@ object FrameMath {
         wrap360(sessionDeg + sessionToTrueNorthDeg)
 
     /**
+     * Convert a device heading reported in [frame] to true north, applying the live
+     * [cfg] offsets. `TRUE_NORTH`/`SDR_ARRAY` headings are returned as-is (wrapped).
+     * Shared by the overlay and the calibration controls so they agree.
+     */
+    fun headingToTrue(frame: BearingFrame, azimuthDeg: Float, cfg: CalibrationConfig.State): Float =
+        when (frame) {
+            BearingFrame.MAGNETIC_NORTH ->
+                magneticToTrue(azimuthDeg, cfg.declinationDeg, cfg.manualNorthNudgeDeg)
+            BearingFrame.ARCORE_SESSION ->
+                sessionToTrue(azimuthDeg, cfg.sessionToTrueNorthDeg)
+            BearingFrame.TRUE_NORTH, BearingFrame.SDR_ARRAY -> wrap360(azimuthDeg)
+        }
+
+    /**
      * Offset that maps a session yaw to true north, given the compass true-north
      * heading observed at the same instant. Feed the result back through
      * [sessionToTrue] to recover [trueHeadingDeg].
