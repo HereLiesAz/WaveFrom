@@ -4,6 +4,7 @@ import android.content.Context
 import com.hereliesaz.wavefrom.signal.model.Detection
 import com.hereliesaz.wavefrom.signal.model.SourceType
 import com.hereliesaz.wavefrom.signal.source.SignalSource
+import com.hereliesaz.wavefrom.signal.source.sdr.UsbDeviceCatalog
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
@@ -19,8 +20,16 @@ import kotlinx.coroutines.flow.emptyFlow
  * Raspberry Pi companion pod, which has full Linux drivers and true phase access
  * across multiple coherent dongles, and streams the result via [com.hereliesaz.wavefrom.signal.source.sdr.NetworkSdrSource].
  */
-class DualRadioSource(@Suppress("unused") private val context: Context) : SignalSource {
+class DualRadioSource(private val context: Context) : SignalSource {
     override val sourceType = SourceType.DUAL_RADIO
-    override fun isAvailable(): Boolean = false // TODO(phase4): detect a usable USB dongle
+
+    /** True when a USB wireless dongle (candidate second antenna) is attached. */
+    override fun isAvailable(): Boolean =
+        UsbDeviceCatalog.attachedWirelessDongles(context).isNotEmpty()
+
+    // TODO(phase4+): correlate the same emitter on the internal radio and the
+    // dongle, then feed TwoElementInterferometer. Consumer dongles rarely expose
+    // phase/CSI on Android, so this falls back to amplitude DF where needed; the
+    // Pi pod provides the phase-coherent path.
     override fun detections(): Flow<Detection> = emptyFlow()
 }

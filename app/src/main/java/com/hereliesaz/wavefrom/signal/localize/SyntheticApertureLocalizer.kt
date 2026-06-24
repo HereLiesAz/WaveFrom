@@ -1,0 +1,73 @@
+package com.hereliesaz.wavefrom.signal.localize
+
+import com.hereliesaz.wavefrom.signal.model.Detection
+import com.hereliesaz.wavefrom.signal.model.Direction
+import com.hereliesaz.wavefrom.signal.physics.PathLoss
+
+/**
+ * Mono-antenna, motion-aided localizer — the RF analog of ARCore's
+ * depth-from-motion. As the device moves, each emitter is sampled from many
+ * known 3D positions (the device pose stream); each sample contributes a range
+ * (true Wi-Fi-RTT distance when available, else a path-loss estimate from RSSI).
+ * Once the samples span a wide enough aperture, [Trilateration] solves the
+ * emitter's 3D position and the detection is upgraded to
+ * [Direction.MotionEstimated].
+ *
+ * Inert until a real pose stream with position is supplied (ARCore, Phase 2) —
+ * the sensor-only fallback has orientation but no translation, so [onPose] is
+ * simply never called with motion and tracks stay RSSI-only. That's correct.
+ */
+class SyntheticApertureLocalizer(
+    private val maxSamplesPerTrack: Int = 48,
+    private val minSamples: Int = 6,
+    private val minConfidence: Float = 0.05f,
+) : MotionAidedLocalizer {
+
+    private var latestPose: Pose? = null
+    private val samples = LinkedHashMap<String, ArrayDeque<RangeSample>>()
+
+    @Synchronized
+    override fun onPose(pose: Pose) {
+        latestPose = pose
+    }
+
+    @Synchronized
+    override fun refine(detection: Detection): Direction? {
+        val pose = latestPose ?: return null
+        val (range, weight) = rangeAndWeight(detection) ?: return null
+
+        // Bound the number of tracked emitters; evict the oldest (LRU-ish) so a
+        // long session can't grow the map without limit.
+        if (!samples.containsKey(detection.trackId) && samples.size >= MAX_TRACKS) {
+            samples.keys.firstOrNull()?.let { samples.remove(it) }
+        }
+        val buf = samples.getOrPut(detection.trackId) { ArrayDeque() }
+        // Only keep a new sample if the device actually moved since the last one,
+        // otherwise a stationary device floods the buffer with duplicates.
+        if (buf.isEmpty() || buf.last().anchor.distanceTo(pose.position) > MIN_STEP_M) {
+            buf.addLast(RangeSample(pose.position, range, weight))
+            while (buf.size > maxSamplesPerTrack) buf.removeFirst()
+        }
+        if (buf.size < minSamples) return null
+
+        val loc = Trilateration.solve(buf.toList()) ?: return null
+        if (loc.confidence < minConfidence) return null
+        return Direction.MotionEstimated(loc.position, loc.confidence)
+    }
+
+    /** Range to use for this sample, and how much to trust it. */
+    private fun rangeAndWeight(detection: Detection): Pair<Float, Float>? {
+        val rssiRange = (detection.direction as? Direction.RssiOnly)?.estimatedDistanceM
+        val rssiConf = (detection.direction as? Direction.RssiOnly)?.confidence
+        val range = rssiRange
+            ?: PathLoss.estimateDistanceM(detection.powerDbm, detection.band)
+            ?: return null
+        val weight = rssiConf ?: PathLoss.confidenceFor(detection.powerDbm)
+        return range to weight
+    }
+
+    private companion object {
+        const val MIN_STEP_M = 0.15f
+        const val MAX_TRACKS = 128
+    }
+}

@@ -6,20 +6,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 /**
- * The main AR view: live camera background with the signal overlay on top.
- * Collecting [ArViewModel] state starts the scan pipeline (cold flows), so
- * sensing only runs while this screen is visible.
+ * Sensor-overlay AR view: CameraX preview + compass/gyro orientation. The
+ * fallback path used when ARCore isn't available.
  */
 @Composable
-fun ArScreen(viewModel: ArViewModel = viewModel()) {
+fun ArScreen(viewModel: ArViewModel) {
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val orientation by viewModel.orientation.collectAsStateWithLifecycle()
 
     Box(Modifier.fillMaxSize()) {
         CameraPreview(Modifier.fillMaxSize())
         SignalHud(tracks = tracks, orientation = orientation, modifier = Modifier.fillMaxSize())
+        HudControls()
     }
 }

@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 
-from .protocol import Bearing
+from .protocol import Bearing, Spectrum
 
 
 class SensorBackend(ABC):
@@ -33,6 +33,10 @@ class SensorBackend(ABC):
     @abstractmethod
     def poll(self) -> list[Bearing]:
         """Return the currently detected emitters as bearings."""
+
+    def spectrum(self) -> Spectrum | None:
+        """Optional power-per-bin snapshot for the waterfall. None if unsupported."""
+        return None
 
 
 class SimulatorBackend(SensorBackend):
@@ -69,22 +73,55 @@ class SimulatorBackend(SensorBackend):
         self._t += 1
         return out
 
+    def spectrum(self) -> Spectrum:
+        """Synthetic 128-bin spectrum: noise floor plus two drifting peaks."""
+        bins = 128
+        start_hz = int(2.4e9)
+        bin_hz = int(1e6)
+        peaks = ((30 + (self._t % 40), 45.0), (90 - (self._t % 30), 35.0))
+        powers = []
+        for i in range(bins):
+            p = -108.0 + 4.0 * math.sin(i * 0.35 + self._t * 0.1)
+            for center, amp in peaks:
+                p = max(p, -108.0 + amp * math.exp(-((i - center) ** 2) / 8.0))
+            powers.append(p)
+        return Spectrum(start_hz, bin_hz, powers)
+
 
 class RtlSdrBackend(SensorBackend):
-    """Stub: a coherent RTL-SDR array (e.g. KrakenSDR) doing MUSIC/correlation DF.
+    """A coherent RTL-SDR pair/array (e.g. KrakenSDR) doing correlation DF.
 
-    Would use ``pyrtlsdr`` / the Kraken DAQ to read IQ from N coherent
-    receivers, run cross-correlation or MUSIC across the array, and emit one
-    ``Bearing`` per detected signal with real azimuth (and elevation for a 2D
-    array). This is the highest-fidelity path and the closest analog to QuadRF.
+    With ``pyrtlsdr`` + numpy this reads IQ from coherent receivers, computes the
+    inter-element phase via cross-correlation and converts it to a bearing. The
+    IQ→bearing math ([bearing_from_iq]) is testable without hardware; [poll]
+    needs the radios and raises until they're wired up.
     """
 
     name = "rtlsdr"
+    antenna_count = 2
+
+    def __init__(self, spacing_m: float = 0.5, freq_hz: float = 433_000_000.0) -> None:
+        self.spacing_m = spacing_m
+        self.freq_hz = freq_hz
+
+    @staticmethod
+    def bearing_from_iq(iq_a, iq_b, freq_hz: float, spacing_m: float) -> tuple[float, float]:
+        """(theta, mirror) bearing from two coherent IQ streams. No hardware needed."""
+        from .dsp import doa_from_phase, interferometric_phase
+
+        phase = interferometric_phase(iq_a, iq_b)
+        return doa_from_phase(phase, spacing_m, freq_hz)
 
     def poll(self) -> list[Bearing]:  # pragma: no cover - hardware stub
-        raise NotImplementedError(
-            "RtlSdrBackend requires a coherent RTL-SDR array and DSP; not yet implemented."
-        )
+        try:
+            import rtlsdr  # noqa: F401  (pyrtlsdr) - optional hardware dep
+        except ImportError as e:
+            raise NotImplementedError(
+                "RtlSdrBackend needs pyrtlsdr + a coherent RTL-SDR array."
+            ) from e
+        # TODO: read coherent IQ buffers, detect signals per bin, and for each
+        # call bearing_from_iq(...) to emit a Bearing.
+        raise NotImplementedError("Coherent RTL-SDR capture loop not yet implemented.")
 
 
 class WifiCsiBackend(SensorBackend):

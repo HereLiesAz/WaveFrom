@@ -58,8 +58,11 @@ class NetworkSdrSource(private val port: Int = DEFAULT_PORT) : SignalSource {
                 val text = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
                 for (line in text.lineSequence()) {
                     if (line.isBlank()) continue
-                    val msg = WireProtocol.decode(line) ?: continue
-                    if (msg is SdrMessage.Bearing) trySend(WireProtocol.toDetection(msg))
+                    when (val msg = WireProtocol.decode(line)) {
+                        is SdrMessage.Bearing -> trySend(WireProtocol.toDetection(msg))
+                        is SdrMessage.Spectrum -> SpectrumBus.publish(msg)
+                        else -> {} // heartbeat / unknown: ignore
+                    }
                 }
             }
         }

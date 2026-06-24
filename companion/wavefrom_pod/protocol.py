@@ -46,6 +46,26 @@ class Bearing:
         )
 
 
+@dataclass
+class Spectrum:
+    """A power-per-bin snapshot for the phone's waterfall view."""
+
+    start_hz: int
+    bin_hz: int
+    powers_dbm: list[float]
+
+    def to_json(self, ts_ms: int | None = None) -> str:
+        return json.dumps(
+            {
+                "type": "spectrum",
+                "startHz": self.start_hz,
+                "binHz": self.bin_hz,
+                "powersDbm": [round(p, 1) for p in self.powers_dbm],
+                "ts": ts_ms if ts_ms is not None else _now_ms(),
+            }
+        )
+
+
 def heartbeat(pod_id: str, antenna_count: int, ts_ms: int | None = None) -> str:
     return json.dumps(
         {
