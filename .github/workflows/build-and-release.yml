@@ -54,15 +54,33 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Decode release keystore
+        if: github.event_name == 'push' && github.ref_name == 'main'
+        env:
+          KEYSTORE_RAW: ${{ secrets.KEYSTORE_RAW }}
+        run: echo "$KEYSTORE_RAW" | base64 -d > "${{ github.workspace }}/release.jks"
+
       - name: Build with Gradle
         id: gradle-build
+        env:
+          # Signing is applied by app/build.gradle.kts only when the keystore exists,
+          # so on PRs/feature branches (no decode step) the release stays unsigned.
+          KEYSTORE_FILE: ${{ github.workspace }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set +e
-          export BUILD_NUMBER=$(git rev-list --count HEAD)
-
-          # Run the JVM + Robolectric unit tests, then build the APK. Tests gate the
-          # build, so a logic regression both fails CI and is reported to Jules below.
-          ./gradlew testDebugUnitTest assembleDebug -PversionBuild=$BUILD_NUMBER --build-cache > build.log 2>&1
+          # Versioning is computed in Gradle (app/build.gradle.kts); a single Gradle
+          # invocation = exactly one version bump. On the default branch we build the
+          # signed release AAB + APK; elsewhere just the (unsigned) debug APK. Tests
+          # gate the build, so a regression fails CI and is reported to Jules below.
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "main" ]; then
+            TASKS="testDebugUnitTest bundleRelease assembleRelease"
+          else
+            TASKS="testDebugUnitTest assembleDebug"
+          fi
+          ./gradlew $TASKS --build-cache > build.log 2>&1
 
           EXIT_CODE=$?
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
@@ -105,82 +123,63 @@ jobs:
             }
 
       # ------------------------------------------------------------------
-      # RELEASE STEPS (Only run on PUSH, not Pull Requests)
+      # RELEASE (only on push to the default branch). Versioning is owned by
+      # Gradle; we read it back here, sign, publish, and persist the bump.
       # ------------------------------------------------------------------
-      - name: Prepare Release Variables
-        if: success() && github.event_name == 'push'
-        id: release_vars
+      - name: Read version + stage artifacts
+        if: success() && github.event_name == 'push' && github.ref_name == 'main'
         run: |
-          export BUILD_NUMBER=$(git rev-list --count HEAD)
-          
-          # Extract version info from properties file
-          MAJOR=$(grep 'major=' version.properties | cut -d'=' -f2)
-          MINOR=$(grep 'minor=' version.properties | cut -d'=' -f2)
+          NAME=$(./gradlew -q printVersionName 2>/dev/null | tail -1)
+          CODE=$(./gradlew -q printVersionCode 2>/dev/null | tail -1)
+          APP_NAME=$(grep 'rootProject.name' settings.gradle.kts | sed -E "s/.*=.*[\"'](.*)[\"']/\1/")
+          AAB=$(find app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$AAB" ] || [ -z "$APK" ]; then echo "Missing signed release artifacts"; exit 1; fi
+          cp "$AAB" "${APP_NAME}-${NAME}.aab"
+          cp "$APK" "${APP_NAME}-${NAME}.apk"
+          {
+            echo "VERSION_NAME=$NAME"
+            echo "VERSION_CODE=$CODE"
+            echo "TAG_NAME=v$NAME"
+            echo "AAB_FILE=${APP_NAME}-${NAME}.aab"
+            echo "APK_FILE=${APP_NAME}-${NAME}.apk"
+          } >> $GITHUB_ENV
 
-          # Calculate Patch version programmatically based on commits since Minor update
-          MINOR_COMMIT=$(git blame -L '/minor=/',+1 version.properties | awk '{print $1}' | tr -d '^')
-          if [ -n "$MINOR_COMMIT" ]; then
-            PATCH=$(git rev-list --count $MINOR_COMMIT..HEAD)
-          else
-            PATCH=$(grep 'patch=' version.properties | cut -d'=' -f2)
-          fi
-
-          VERSION_NAME="$MAJOR.$MINOR.$PATCH.$BUILD_NUMBER"
-          
-          TAG_NAME="latest-debug-v${MAJOR}.${MINOR}"
-          
-          # Dynamic App Name from settings.gradle
-          if [ -f "settings.gradle.kts" ]; then
-             APP_NAME=$(grep 'rootProject.name' settings.gradle.kts | sed -E "s/.*=.*[\"'](.*)[\"']/\1/")
-          elif [ -f "settings.gradle" ]; then
-             APP_NAME=$(grep 'rootProject.name' settings.gradle | sed -E "s/.*=.*[\"'](.*)[\"']/\1/")
-          else
-             APP_NAME="App"
-          fi
-          
-          # Locate built APK
-          APK_ORIGINAL=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
-          
-          if [ -z "$APK_ORIGINAL" ]; then
-             echo "Error: No APK found to release!"
-             exit 1
-          fi
-
-          TARGET_NAME="${APP_NAME}-${VERSION_NAME}-debug.apk"
-          
-          # Rename for release
-          mv "$APK_ORIGINAL" "$TARGET_NAME"
-          
-          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-          echo "APK_FILE=$TARGET_NAME" >> $GITHUB_ENV
-
-      - name: Publish Release
-        if: success() && github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Persist version bump
+        if: success() && github.event_name == 'push' && github.ref_name == 'main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.properties
+          # [skip ci] stops this push from re-triggering the workflow (no publish loop).
+          git commit -m "chore: release ${VERSION_NAME} (versionCode ${VERSION_CODE}) [skip ci]" \
+            || { echo "no version change to commit"; exit 0; }
+          # Non-fatal: if main is branch-protected and rejects the bot push, warn rather
+          # than fail the release. (For the build counter to persist/never-reset across
+          # runs, the actions bot needs push access to main.)
+          git push origin HEAD:main \
+            || echo "::warning::version bump push rejected — versionCode may not persist (branch protection?)"
 
-          # Force update tag to point to current commit
-          git tag -fa $TAG_NAME -m "Latest Debug Build"
-          git push origin $TAG_NAME --force
+      - name: Publish GitHub release (signed AAB + APK)
+        if: success() && github.event_name == 'push' && github.ref_name == 'main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # versionName is unique per build (patch increments), so the tag is always new.
+          gh release create "$TAG_NAME" "$APK_FILE" "$AAB_FILE" \
+            --title "WaveFrom $VERSION_NAME" \
+            --notes "Signed release $VERSION_NAME (versionCode $VERSION_CODE) from ${GITHUB_SHA}." \
+            --target "$GITHUB_SHA"
 
-          # Check if release exists
-          if gh release view $TAG_NAME > /dev/null 2>&1; then
-             echo "Updating existing release..."
-             gh release edit $TAG_NAME --prerelease \
-               --title "Latest Debug Build ($TAG_NAME)" \
-               --notes "Auto-build from commit $GITHUB_SHA" \
-               --target $GITHUB_SHA
-             gh release upload $TAG_NAME "$APK_FILE" --clobber
-          else
-             echo "Creating new release..."
-             gh release create $TAG_NAME "$APK_FILE" --prerelease \
-               --title "Latest Debug Build ($TAG_NAME)" \
-               --notes "Auto-build from commit $GITHUB_SHA" \
-               --target $GITHUB_SHA
-          fi
+      - name: Upload AAB to Google Play (internal track)
+        if: success() && github.event_name == 'push' && github.ref_name == 'main'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.hereliesaz.wavefrom
+          releaseFiles: ${{ env.AAB_FILE }}
+          track: internal
+          status: completed
 
   # --------------------------------------------------------------------------
   # Instrumented smoke test on an emulator. Deliberately decoupled from
