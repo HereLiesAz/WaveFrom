@@ -50,6 +50,8 @@ fun HudControls(
     modifier: Modifier = Modifier,
     showArHelix: Boolean = false,
     onToggleArHelix: () -> Unit = {},
+    liveWaveformLabel: String? = null,
+    onOpenLiveWaveform: () -> Unit = {},
 ) {
     var showWaterfall by remember { mutableStateOf(false) }
     var showCalibrate by remember { mutableStateOf(false) }
@@ -70,6 +72,11 @@ fun HudControls(
             }
             FilledTonalButton(onClick = onToggleArHelix) {
                 Text(if (showArHelix) "Hide AR helix" else "AR helix")
+            }
+            if (liveWaveformLabel != null) {
+                FilledTonalButton(onClick = onOpenLiveWaveform) {
+                    Text("⌁ $liveWaveformLabel")
+                }
             }
             FilledTonalButton(onClick = { showCalibrate = !showCalibrate }) {
                 Text("Calibrate")

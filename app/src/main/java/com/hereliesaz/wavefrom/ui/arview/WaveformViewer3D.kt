@@ -34,9 +34,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hereliesaz.wavefrom.signal.model.SignalBand
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.model.Vec3
 import com.hereliesaz.wavefrom.signal.physics.BandColor
+import com.hereliesaz.wavefrom.signal.source.sdr.IqFrame
 import com.hereliesaz.wavefrom.signal.waveform.HelixGeometry
 import com.hereliesaz.wavefrom.signal.waveform.IqWindow
 import com.hereliesaz.wavefrom.signal.waveform.OrbitCamera
@@ -46,24 +48,51 @@ import com.hereliesaz.wavefrom.signal.waveform.WaveformSource
 private const val FOV_DEG = 50f
 
 /**
+ * What the 3D viewer renders: a labelled IQ window plus the metadata for its header.
+ * Decouples the viewer from [Track] so it can show either a tapped emitter (parametric,
+ * or real if matched) or a single-antenna SDR's live capture (which has no track).
+ */
+data class WaveformTarget(
+    val label: String,
+    val band: SignalBand,
+    val frequencyHz: Long,
+    /** Smoothed power for a track; null for a raw SDR window where it's unknown. */
+    val powerDbm: Float?,
+    val window: IqWindow,
+) {
+    companion object {
+        fun fromTrack(track: Track, real: IqWindow?) = WaveformTarget(
+            label = track.identity.label,
+            band = track.band,
+            frequencyHz = track.band.frequencyHz(track.frequencyHz),
+            powerDbm = track.smoothedPowerDbm,
+            window = real ?: HelixGeometry.parametric(track),
+        )
+
+        fun fromFrame(frame: IqFrame) = WaveformTarget(
+            label = frame.label,
+            band = SignalBand.fromFrequencyHz(frame.frequencyHz),
+            frequencyHz = frame.frequencyHz,
+            powerDbm = null,
+            window = frame.window,
+        )
+    }
+}
+
+/**
  * Full-screen interactive viewer for a single emitter's 3D IQ helix (I vs Q vs time).
- * The helix slowly auto-spins; drag orbits it, pinch zooms. When [iqWindow] is null the
- * helix is synthesized parametrically from the track's frequency + power; when a real
- * captured window is supplied (Step 4) it reflects actual modulation. The header makes
- * the data source explicit so the visual never overstates its fidelity.
+ * The helix slowly auto-spins; drag orbits it, pinch zooms. A PARAMETRIC [target] is
+ * synthesized from frequency + power; a REAL one reflects actual captured modulation. The
+ * header makes the data source explicit so the visual never overstates its fidelity.
  */
 @Composable
 fun WaveformViewer3D(
-    track: Track,
+    target: WaveformTarget,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
-    iqWindow: IqWindow? = null,
 ) {
-    val window = remember(track.id, track.smoothedPowerDbm, track.frequencyHz, iqWindow) {
-        iqWindow ?: HelixGeometry.parametric(track)
-    }
-    val points = remember(window) { HelixGeometry.fromIq(window, radiusScale = 1f) }
-    val color = Color(BandColor.argb(track.band))
+    val points = remember(target.window) { HelixGeometry.fromIq(target.window, radiusScale = 1f) }
+    val color = Color(BandColor.argb(target.band))
 
     // Continuous turntable spin, with user drag/zoom layered on top.
     val spin by rememberInfiniteTransition(label = "spin").animateFloat(
@@ -118,7 +147,7 @@ fun WaveformViewer3D(
             }
         }
 
-        Header(track, window.source, Modifier.align(Alignment.TopStart).fillMaxWidth())
+        Header(target, Modifier.align(Alignment.TopStart).fillMaxWidth())
 
         FilledTonalButton(
             onClick = onClose,
@@ -140,10 +169,10 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawAxis(
 }
 
 @Composable
-private fun Header(track: Track, source: WaveformSource, modifier: Modifier = Modifier) {
-    val color = Color(BandColor.argb(track.band))
-    val freq = track.band.frequencyHz(track.frequencyHz)
-    val freqLabel = "%.3f GHz".format(freq / 1e9)
+private fun Header(target: WaveformTarget, modifier: Modifier = Modifier) {
+    val color = Color(BandColor.argb(target.band))
+    val freqLabel = "%.3f GHz".format(target.frequencyHz / 1e9)
+    val powerLabel = target.powerDbm?.let { "${it.toInt()} dBm" } ?: "live"
     Column(
         modifier
             .background(Color.Black.copy(alpha = 0.5f))
@@ -152,12 +181,12 @@ private fun Header(track: Track, source: WaveformSource, modifier: Modifier = Mo
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(12.dp).clip(CircleShape).background(color))
-            Text(track.identity.label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            SourceBadge(source)
+            Text(target.label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            SourceBadge(target.window.source)
         }
-        Text("${track.band.displayName} · $freqLabel · ${track.smoothedPowerDbm.toInt()} dBm", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+        Text("${target.band.displayName} · $freqLabel · $powerLabel", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
         Text(
-            if (source == WaveformSource.REAL) {
+            if (target.window.source == WaveformSource.REAL) {
                 "Real captured IQ — twist is true baseband modulation."
             } else {
                 "Synthesized from frequency + power; twist is a perceptual map of the carrier, not literal Hz."

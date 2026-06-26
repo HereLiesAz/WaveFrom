@@ -16,6 +16,8 @@ import com.hereliesaz.wavefrom.ar.sensor.HeadingProvider
 import com.hereliesaz.wavefrom.signal.localize.SyntheticApertureLocalizer
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.repo.SignalRepository
+import com.hereliesaz.wavefrom.signal.source.sdr.IqFrame
+import com.hereliesaz.wavefrom.signal.source.sdr.WaveformBus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -56,6 +58,9 @@ class ArViewModel(app: Application) : AndroidViewModel(app) {
     fun selectTrack(id: String) { _selectedTrackId.value = id }
 
     fun clearSelection() { _selectedTrackId.value = null }
+
+    /** Latest real IQ window from an SDR (on-phone USB or networked), for the 3D viewer. */
+    val liveWaveform: StateFlow<IqFrame?> = WaveformBus.latest
 
     val orientation: StateFlow<DeviceOrientation> =
         HeadingProvider(app).orientation()

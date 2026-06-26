@@ -46,15 +46,28 @@ fun WaveFromArScreen(viewModel: ArViewModel = viewModel()) {
             RenderMode.SENSOR -> ArScreen(viewModel)
         }
 
-        // Tapping a marker opens the 3D IQ-helix viewer over the camera view. The
-        // track is looked up live so the helix keeps updating; if it expires while
-        // open, the viewer closes.
+        // Tapping a marker (or the Live IQ button) opens the 3D IQ-helix viewer over the
+        // camera view. The data is looked up live so the helix keeps updating.
         val selectedId by viewModel.selectedTrackId.collectAsStateWithLifecycle()
         val tracks by viewModel.tracks.collectAsStateWithLifecycle()
-        val selected = selectedId?.let { id -> tracks.firstOrNull { it.id == id } }
-        if (selected != null) {
+        val liveWaveform by viewModel.liveWaveform.collectAsStateWithLifecycle()
+
+        val target = selectedId?.let { id ->
+            val track = tracks.firstOrNull { it.id == id }
+            when {
+                // A tapped emitter: use its real IQ if a window is tagged for it, else parametric.
+                track != null -> {
+                    val real = liveWaveform?.takeIf { it.sourceId == track.id }?.window
+                    WaveformTarget.fromTrack(track, real)
+                }
+                // A single-antenna SDR has no track; match its live window by source id.
+                liveWaveform?.sourceId == id -> liveWaveform?.let { WaveformTarget.fromFrame(it) }
+                else -> null
+            }
+        }
+        if (target != null) {
             WaveformViewer3D(
-                track = selected,
+                target = target,
                 onClose = viewModel::clearSelection,
                 modifier = Modifier.fillMaxSize(),
             )

@@ -57,6 +57,8 @@ fun ArCoreScreen(viewModel: ArViewModel) {
     var orientation by remember { mutableStateOf(DeviceOrientation(0f, 0f, 0f)) }
     var camWorld by remember { mutableStateOf(Vec3.ZERO) }
     var showArHelix by remember { mutableStateOf(false) }
+    val liveWaveform by viewModel.liveWaveform.collectAsStateWithLifecycle()
+    val freshWaveform = liveWaveform?.takeIf { System.currentTimeMillis() - it.timestampMs < 3_000 }
 
     val glView = remember {
         GLSurfaceView(context).apply {
@@ -129,6 +131,8 @@ fun ArCoreScreen(viewModel: ArViewModel) {
             headingFrame = BearingFrame.ARCORE_SESSION,
             showArHelix = showArHelix,
             onToggleArHelix = { showArHelix = !showArHelix },
+            liveWaveformLabel = freshWaveform?.label,
+            onOpenLiveWaveform = { freshWaveform?.let { viewModel.selectTrack(it.sourceId) } },
         )
     }
 }
