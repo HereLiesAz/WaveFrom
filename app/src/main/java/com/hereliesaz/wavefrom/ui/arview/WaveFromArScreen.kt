@@ -2,14 +2,19 @@ package com.hereliesaz.wavefrom.ui.arview
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.ar.core.ArCoreApk
@@ -26,6 +31,7 @@ import kotlinx.coroutines.delay
 fun WaveFromArScreen(viewModel: ArViewModel = viewModel()) {
     val context = LocalContext.current
     var mode by remember { mutableStateOf(RenderMode.SENSOR) }
+    var showMap by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         repeat(10) {
@@ -71,6 +77,19 @@ fun WaveFromArScreen(viewModel: ArViewModel = viewModel()) {
                 onClose = viewModel::clearSelection,
                 modifier = Modifier.fillMaxSize(),
             )
+        }
+
+        // Top-down map overlay. The camera screen stays composed underneath so it keeps
+        // pushing the user's live pose; the map covers it with an opaque background.
+        if (showMap) {
+            MapScreen(viewModel, onClose = { showMap = false }, Modifier.fillMaxSize())
+        } else {
+            FilledTonalButton(
+                onClick = { showMap = true },
+                modifier = Modifier.align(Alignment.CenterStart).padding(8.dp),
+            ) {
+                Text("Map")
+            }
         }
     }
 }

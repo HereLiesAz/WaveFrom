@@ -3,6 +3,7 @@ package com.hereliesaz.wavefrom
 import com.hereliesaz.wavefrom.signal.localize.GpsPoseProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import kotlin.math.cos
 import org.junit.Test
@@ -48,5 +49,21 @@ class GpsPoseProviderTest {
         gps.toLocal(45.0, -122.0, 100.0)
         val p = gps.toLocal(45.0, -122.0, 112.5)
         assertEquals(12.5f, p.y, 1e-2f)
+    }
+
+    @Test
+    fun toGeoIsNullBeforeOrigin() {
+        assertNull(GpsPoseProvider().toGeo(com.hereliesaz.wavefrom.signal.model.Vec3(1f, 2f, 3f)))
+    }
+
+    @Test
+    fun toGeoInvertsToLocal() {
+        val gps = GpsPoseProvider()
+        gps.toLocal(45.0, -122.0, 50.0) // set origin
+        val local = gps.toLocal(45.002, -122.003, 75.0)
+        val geo = gps.toGeo(local)!!
+        assertEquals(45.002, geo.latDeg, 1e-6)
+        assertEquals(-122.003, geo.lonDeg, 1e-6)
+        assertEquals(75.0, geo.altM, 1e-2)
     }
 }
