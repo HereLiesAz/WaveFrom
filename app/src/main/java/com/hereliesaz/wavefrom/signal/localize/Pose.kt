@@ -13,4 +13,11 @@ data class Pose(
     /** Forward (look) direction unit vector in world space. */
     val forward: Vec3,
     val timestampMs: Long,
+    /**
+     * 1-sigma horizontal position uncertainty in metres. 0 for ARCore's cm-level
+     * VIO; several metres for the GPS sensor-path fallback. The localizer uses it
+     * to gate motion (only a step larger than the noise counts as real aperture)
+     * and to cap solve confidence, so GPS-driven estimates stay honestly coarse.
+     */
+    val positionAccuracyM: Float = 0f,
 )
