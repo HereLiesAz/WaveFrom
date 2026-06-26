@@ -8,49 +8,61 @@ plugins {
 
 // ---------------------------------------------------------------------------
 // Programmatic versioning (source of truth: version.properties).
-//   major     — edited by hand.
-//   minor     — edited by hand; bumping it resets patch to 0.
-//   patch     — +1 on every artifact build; resets when minor changes.
-//   build     — +1 on every artifact build; NEVER resets → the Play versionCode.
-//   patchMinor— bookkeeping: the minor value the current patch is counted within.
-// The file is only mutated when an assemble/bundle is actually requested, so
-// `tasks`, IDE sync, and plain unit-test runs don't churn it. CI commits the
-// mutated file back so the build counter persists across (ephemeral) runners.
+//   major/minor — edited by hand; bumping minor resets patch to 0.
+//   patch — +1 on every artifact build; resets when minor changes.
+//   build — +1 on every artifact build; NEVER resets → the Play versionCode.
+//   patchMinor — bookkeeping: the minor the current patch is counted within.
+//
+// version.properties is read as a *tracked* configuration input (via providers),
+// so the configuration cache stays enabled: it is reused for tests/checks and is
+// correctly invalidated for the next artifact build (which changes the file). The
+// file is written from a task at execution time — never during configuration — so
+// there are no config-cache-hostile side effects in the configuration phase.
+// "Bump-then-use": an artifact build advances the counters for THIS build, so a
+// minor change shows its patch reset immediately.
 // ---------------------------------------------------------------------------
 val versionPropsFile = rootProject.file("version.properties")
-val (computedVersionName, computedVersionCode) = run {
-    val props = Properties().apply { versionPropsFile.inputStream().use { load(it) } }
-    fun read(key: String, default: Int = 0) = (props.getProperty(key) ?: "$default").trim().toInt()
+val versionProps = Properties().apply {
+    val text = providers.fileContents(
+        rootProject.layout.projectDirectory.file("version.properties"),
+    ).asText.get()
+    load(text.reader())
+}
+fun versionInt(key: String, default: Int = 0) =
+    (versionProps.getProperty(key) ?: "$default").trim().toInt()
 
-    val major = read("major")
-    val minor = read("minor")
-    var patch = read("patch")
-    var build = read("build")
-    val patchMinor = read("patchMinor", -1)
+val verMajor = versionInt("major")
+val verMinor = versionInt("minor")
+val curPatch = versionInt("patch")
+val curBuild = versionInt("build")
+val curPatchMinor = versionInt("patchMinor", -1)
 
-    val isArtifactBuild = gradle.startParameter.taskNames.any { name ->
-        val task = name.substringAfterLast(':').lowercase()
-        task.startsWith("assemble") || task.startsWith("bundle")
-    }
-    if (isArtifactBuild) {
-        patch = if (patchMinor != minor) 0 else patch + 1
-        build += 1
-        versionPropsFile.writeText(
-            buildString {
-                appendLine("major=$major")
-                appendLine("minor=$minor")
-                appendLine("patch=$patch")
-                appendLine("build=$build")
-                appendLine("patchMinor=$minor")
-            },
-        )
-    }
-    // major.minor.patch name, build as the (>= 1) Play versionCode.
-    Pair("$major.$minor.$patch", build.coerceAtLeast(1))
+val isArtifactBuild = gradle.startParameter.taskNames.any { name ->
+    val task = name.substringAfterLast(':').lowercase()
+    task.startsWith("assemble") || task.startsWith("bundle")
+}
+val verPatch = when {
+    !isArtifactBuild -> curPatch
+    curPatchMinor != verMinor -> 0 // minor changed → reset patch
+    else -> curPatch + 1
+}
+val verBuild = if (isArtifactBuild) curBuild + 1 else curBuild
+
+val computedVersionName = "$verMajor.$verMinor.$verPatch"
+val computedVersionCode = verBuild.coerceAtLeast(1) // Play requires versionCode >= 1
+
+// Persist the advanced counters at execution time (so configuration stays pure).
+// Wired into artifact builds only; CI commits the file back so the counter persists.
+val bumpVersion = tasks.register("bumpVersion") {
+    val out = versionPropsFile
+    val text = "major=$verMajor\nminor=$verMinor\npatch=$verPatch\nbuild=$verBuild\npatchMinor=$verMinor\n"
+    doLast { out.writeText(text) }
+}
+if (isArtifactBuild) {
+    tasks.named("preBuild").configure { dependsOn(bumpVersion) }
 }
 
-// Capture the values into task-local vals (not script references) so CI can read
-// the version straight from Gradle: `./gradlew -q printVersionName printVersionCode`.
+// CI reads the version straight from Gradle: `./gradlew -q printVersionName printVersionCode`.
 tasks.register("printVersionName") {
     val name = computedVersionName
     doLast { println(name) }
