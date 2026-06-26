@@ -47,6 +47,9 @@ fun ArScreen(viewModel: ArViewModel) {
     val orientation by viewModel.orientation.collectAsStateWithLifecycle()
     val liveWaveform by viewModel.liveWaveform.collectAsStateWithLifecycle()
     var showArHelix by remember { mutableStateOf(false) }
+    val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
+    val isReplaying by viewModel.isReplaying.collectAsStateWithLifecycle()
+    val hasRecordings by viewModel.hasRecordings.collectAsStateWithLifecycle()
     // Only offer the Live-IQ button while an SDR window is actually arriving.
     val freshWaveform = liveWaveform?.takeIf { System.currentTimeMillis() - it.timestampMs < 3_000 }
 
@@ -110,6 +113,11 @@ fun ArScreen(viewModel: ArViewModel) {
             onToggleArHelix = { showArHelix = !showArHelix },
             liveWaveformLabel = freshWaveform?.label,
             onOpenLiveWaveform = { freshWaveform?.let { viewModel.selectTrack(it.sourceId) } },
+            isRecording = isRecording,
+            onToggleRecording = viewModel::toggleRecording,
+            isReplaying = isReplaying,
+            canReplay = hasRecordings,
+            onToggleReplay = { if (isReplaying) viewModel.stopReplay() else viewModel.replayLatest() },
         )
     }
 }
