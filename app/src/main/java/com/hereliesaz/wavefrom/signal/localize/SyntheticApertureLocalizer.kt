@@ -13,9 +13,11 @@ import com.hereliesaz.wavefrom.signal.physics.PathLoss
  * emitter's 3D position and the detection is upgraded to
  * [Direction.MotionEstimated].
  *
- * Inert until a real pose stream with position is supplied (ARCore, Phase 2) —
- * the sensor-only fallback has orientation but no translation, so [onPose] is
- * simply never called with motion and tracks stay RSSI-only. That's correct.
+ * Inert until a real pose stream with position is supplied (ARCore) — the
+ * sensor-only fallback has orientation but no translation, so [onPose] is
+ * simply never called with motion and tracks stay RSSI-only. That's correct:
+ * GPS-level position noise (metres) would swamp the synthetic aperture, so the
+ * solver intentionally runs only on cm-level VIO translation.
  */
 class SyntheticApertureLocalizer(
     private val maxSamplesPerTrack: Int = 48,
