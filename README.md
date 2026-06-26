@@ -26,21 +26,39 @@ known, so the overlay never fakes precision it doesn't have:
   `SignalSource` implementations (Wi-Fi, BLE, cellular, network/USB SDR,
   dual-radio), the `SignalRepository` aggregator, path-loss physics, and the
   `MotionAidedLocalizer` / `Interferometer` seams.
-- `ar/` — the overlay layer: a sensor-based renderer (compass + gyro + gnomonic
-  projection) today, with an ARCore seam (`ArRendererFactory`) for Phase 2.
-- `ui/` — Jetpack Compose camera view, HUD, and permission flow.
+- `ar/` — the overlay layer: a sensor renderer (compass + gyro + gnomonic
+  projection) and an ARCore world-tracking renderer, picked at runtime; plus the
+  `frame/` bearing-frame calibration that reconciles SDR-array, magnetic and
+  ARCore-session azimuths onto true north.
+- `ui/` — Jetpack Compose camera view, HUD, 3D IQ-helix viewer, spectrum
+  waterfall, calibration controls, and the permission flow.
 - `companion/` — a Raspberry Pi sensor pod (Python) that hosts dongles/SDRs the
   phone can't drive and streams bearings over the WaveFrom wire protocol. See
   [`companion/README.md`](companion/README.md).
 
-## Status — Phase 1
+## Status
 
-Runs on any phone with no extra hardware: live camera with floating, band-colored
-markers for nearby Wi-Fi APs, BLE devices and cellular cells (RSSI-only), a
-debug synthetic bearing source that validates the azimuth/elevation projection,
-and the full source/aggregator/overlay pipeline. ARCore rendering, the
-motion-aided localizer, network/USB SDR ingestion and dual-radio interferometry
-are scaffolded for later phases.
+The full pipeline is built end to end. On a bare phone it runs with no extra
+hardware; every additional radio raises the localization tier it can reach.
+
+- **Overlay** — live camera with floating, band-colored markers; a sensor
+  renderer (compass + gyro + gnomonic projection) and an ARCore world-tracking
+  renderer are picked at runtime, with bearing-frame calibration reconciling
+  SDR-array, magnetic and ARCore azimuths onto true north.
+- **Sources** — the phone's own Wi-Fi / BLE / cellular radios (RSSI-only, with
+  optional OpenCellID cell-tower geolocation), network/USB SDR ingestion,
+  on-phone USB SDR including **HackRF** (vendored `hackrf_android`), and
+  dual-radio interferometry.
+- **Localization** — the motion-aided localizer (ARCore pose fused with
+  Wi-Fi-RTT / RSSI) and the interferometer seam are live, alongside real DSP
+  direction-of-arrival from the companion pod.
+- **Visualization** — a 3D IQ-helix viewer and a spectrum waterfall fed over the
+  WaveFrom wire protocol.
+- **Companion pod** — a Raspberry Pi host (Python) that drives dongles/SDRs the
+  phone can't, including HackRF via SoapySDR, and streams bearings + spectrum.
+- **Release** — signed release builds (AAB + APK) with programmatic per-build
+  versioning, published to GitHub releases and the Google Play internal track
+  from CI.
 
 ## Build
 
