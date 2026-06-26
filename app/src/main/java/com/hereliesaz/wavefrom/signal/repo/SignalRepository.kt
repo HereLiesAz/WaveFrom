@@ -3,6 +3,7 @@ package com.hereliesaz.wavefrom.signal.repo
 import android.content.Context
 import com.hereliesaz.wavefrom.signal.localize.MotionAidedLocalizer
 import com.hereliesaz.wavefrom.signal.localize.SyntheticApertureLocalizer
+import com.hereliesaz.wavefrom.signal.record.ReplaySource
 import com.hereliesaz.wavefrom.signal.model.Detection
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.source.SignalSource
@@ -55,18 +56,28 @@ class SignalRepository(
         }
     }
 
-    val tracks: StateFlow<List<Track>> =
+    /**
+     * The merged, motion-refined detection stream — every source folded together
+     * with the Tier-2 localizer applied, before track aggregation. Exposed so a
+     * session recorder can capture exactly what the overlay sees (including
+     * localizer upgrades), and so replay reproduces the same result.
+     */
+    val detections: Flow<Detection> =
         merge(
             *sources.map { src ->
                 src.detections()
                     .catch { /* fail soft: a dead source never kills the merge */ }
-                    .map<Detection, Input> { det ->
+                    .map { det ->
                         // Tier-2 upgrade: motion-aided localizer may resolve a 3D
                         // position from accumulated motion; otherwise unchanged.
-                        val refined = localizer.refine(det)?.let { det.copy(direction = it) } ?: det
-                        Input.Det(refined)
+                        localizer.refine(det)?.let { det.copy(direction = it) } ?: det
                     }
             }.toTypedArray(),
+        )
+
+    val tracks: StateFlow<List<Track>> =
+        merge(
+            detections.map<Detection, Input> { Input.Det(it) },
             ticker,
         ).scan(emptyList<Track>()) { _, input ->
             when (input) {
@@ -97,6 +108,9 @@ class SignalRepository(
                 add(UsbSdrSource(context))
                 add(HackRfSource(context))
                 add(DualRadioSource(context))
+                // Idle until the user loads a recording; replays captured sessions
+                // back through the same pipeline (see signal/record).
+                add(ReplaySource())
                 if (includeSimulated) add(FakeBearingSource())
             }
     }

@@ -59,6 +59,10 @@ hardware; every additional radio raises the localization tier it can reach.
   companion pod's real DSP direction-of-arrival round out the higher tiers.
 - **Visualization** — a 3D IQ-helix viewer and a spectrum waterfall fed over the
   WaveFrom wire protocol.
+- **Record & replay** — capture the live detection stream (post-localizer) to a
+  newline-delimited `.wfrec` file and replay it back through the same pipeline
+  with original timing, so the overlay can be developed and demoed without live
+  hardware. A replay banner keeps recorded data from being mistaken for live.
 - **Companion pod** — a Raspberry Pi host (Python) that drives dongles/SDRs the
   phone can't, including HackRF via SoapySDR, and streams bearings + spectrum.
 - **Release** — signed release builds (AAB + APK) with programmatic per-build

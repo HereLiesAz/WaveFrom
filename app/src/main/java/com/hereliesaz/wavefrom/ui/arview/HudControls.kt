@@ -52,6 +52,11 @@ fun HudControls(
     onToggleArHelix: () -> Unit = {},
     liveWaveformLabel: String? = null,
     onOpenLiveWaveform: () -> Unit = {},
+    isRecording: Boolean = false,
+    onToggleRecording: () -> Unit = {},
+    isReplaying: Boolean = false,
+    canReplay: Boolean = false,
+    onToggleReplay: () -> Unit = {},
 ) {
     var showWaterfall by remember { mutableStateOf(false) }
     var showCalibrate by remember { mutableStateOf(false) }
@@ -81,6 +86,23 @@ fun HudControls(
             FilledTonalButton(onClick = { showCalibrate = !showCalibrate }) {
                 Text("Calibrate")
             }
+            // Record the live detection stream; replay the latest capture. A replay
+            // banner makes it obvious the overlay is showing recorded, not live, data.
+            FilledTonalButton(onClick = onToggleRecording) {
+                Text(if (isRecording) "■ Stop rec" else "● Record")
+            }
+            if (isReplaying) {
+                FilledTonalButton(onClick = onToggleReplay) { Text("■ Stop replay") }
+            } else if (canReplay) {
+                FilledTonalButton(onClick = onToggleReplay) { Text("▶ Replay last") }
+            }
+        }
+        if (isReplaying) {
+            Text(
+                "● REPLAY — recorded data",
+                color = Color(0xFFFFB060),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp),
+            )
         }
         if (showCalibrate) {
             CalibrationPanel(
