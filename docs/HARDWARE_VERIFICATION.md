@@ -67,3 +67,19 @@ rendering and the real-IQ paths on a device.
    bearing marker, when tapped, shows a REAL helix for that located emitter; a single-antenna
    `rtlsdr` pod surfaces via the **⌁ USB SDR**-style Live IQ button. Confirm the helix
    updates at roughly the pod's `waveform` rate (~2 Hz) and the link stays light.
+
+## 5. HackRF One
+
+The Pi-side `HackRfBackend` registration + the on-phone `HackRfIq` int8 scaling are
+unit-tested; capture itself needs the device.
+
+1. **On-phone:** plug a HackRF One into the phone over USB-OTG. WaveFrom may offer to
+   launch on attach; grant the USB-permission dialog. Pass: the spectrum waterfall fills
+   and a **⌁ HackRF** Live-IQ button appears → tap it for a **REAL** helix reacting to the
+   live signal. Unplug → fails soft (no crash; other sources keep working). An RTL-SDR
+   plugged in at the same time still routes to the rtl_tcp path, not here.
+2. **Pi:** `apt install soapysdr-module-hackrf` + `pip install soapysdr numpy`, then
+   `python3 -m wavefrom_pod --backend hackrf --center-freq 433e6 --sample-rate 2e6 --gain 16`.
+   Pass: real spectrum in the phone waterfall and a HackRF helix via the Live-IQ button,
+   over the wire protocol. Without SoapySDR the pod prints "backend not available" and exits
+   cleanly.

@@ -1,0 +1,24 @@
+WaveFrom
+Copyright (C) 2026 HereLiesAz
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 2 of the License, or (at your option) any later
+version. See the LICENSE file for the full text.
+
+--------------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------------
+
+hackrf_android
+  Vendored at: app/src/main/java/com/mantz_it/hackrf_android/
+  Author:      Dennis Mantz
+  Source:      https://github.com/demantz/hackrf_android
+  License:     GNU General Public License, version 2 or later
+  Based on libhackrf (https://github.com/mossmann/hackrf) by Jared Boone,
+  Benjamin Vernoux and Michael Ossmann (BSD-3-Clause).
+
+  WaveFrom drives an on-phone HackRF One over USB-OTG using this library. Because
+  it is GPL-licensed, the WaveFrom application as a whole is distributed under the
+  GPL v2-or-later (see LICENSE). The vendored source retains its original GPL
+  headers and is unmodified.
