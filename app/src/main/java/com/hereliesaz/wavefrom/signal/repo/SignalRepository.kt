@@ -2,7 +2,7 @@ package com.hereliesaz.wavefrom.signal.repo
 
 import android.content.Context
 import com.hereliesaz.wavefrom.signal.localize.MotionAidedLocalizer
-import com.hereliesaz.wavefrom.signal.localize.PassthroughLocalizer
+import com.hereliesaz.wavefrom.signal.localize.SyntheticApertureLocalizer
 import com.hereliesaz.wavefrom.signal.model.Detection
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.source.SignalSource
@@ -37,7 +37,11 @@ class SignalRepository(
     private val sources: List<SignalSource>,
     scope: CoroutineScope,
     private val aggregator: TrackAggregator = TrackAggregator(),
-    private val localizer: MotionAidedLocalizer = PassthroughLocalizer(),
+    // The real motion-aided solver is the default: when a pose stream with
+    // translation is supplied (ARCore), RSSI-only detections are upgraded to
+    // Tier-2 [Direction.MotionEstimated]. Inert (but harmless) until poses with
+    // motion arrive. Tests/headless callers can pass a PassthroughLocalizer.
+    private val localizer: MotionAidedLocalizer = SyntheticApertureLocalizer(),
 ) {
     private sealed interface Input {
         data class Det(val detection: Detection) : Input
@@ -75,9 +79,10 @@ class SignalRepository(
         private const val TICK_MS = 1_000L
 
         /**
-         * Default Phase 1 source set: the phone's own radios plus, in debug, a
-         * synthetic bearing source. Network/USB/dual-radio sources are added in
-         * later phases.
+         * The full source set: the phone's own radios (Wi-Fi scan + RTT, BLE,
+         * cellular), the networked Pi/SDR pod, on-phone USB SDRs (RTL-SDR,
+         * HackRF), and dual-radio interferometry — plus, in debug, a synthetic
+         * bearing source. Each source fails soft, so absent hardware is harmless.
          */
         fun defaultSources(context: Context, includeSimulated: Boolean): List<SignalSource> =
             buildList {

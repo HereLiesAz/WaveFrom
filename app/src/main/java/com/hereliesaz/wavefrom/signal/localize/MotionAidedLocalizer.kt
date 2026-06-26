@@ -10,8 +10,9 @@ import com.hereliesaz.wavefrom.signal.model.Direction
  * the same emitter is sampled from many known positions until its direction or
  * 3D position can be solved.
  *
- * Phase 3 supplies the real solver; [PassthroughLocalizer] is the Phase 1 no-op
- * so the pipeline already routes through this seam.
+ * [SyntheticApertureLocalizer] is the real solver and the pipeline default;
+ * [PassthroughLocalizer] is a no-op kept for tests and headless callers that
+ * have no pose stream.
  */
 interface MotionAidedLocalizer {
     /** Record a device pose sample (ARCore or sensor-fused). */

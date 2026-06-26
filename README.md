@@ -49,9 +49,13 @@ hardware; every additional radio raises the localization tier it can reach.
   optional OpenCellID cell-tower geolocation), network/USB SDR ingestion,
   on-phone USB SDR including **HackRF** (vendored `hackrf_android`), and
   dual-radio interferometry.
-- **Localization** — the motion-aided localizer (ARCore pose fused with
-  Wi-Fi-RTT / RSSI) and the interferometer seam are live, alongside real DSP
-  direction-of-arrival from the companion pod.
+- **Localization** — on the ARCore path the motion-aided localizer is live:
+  the cm-level VIO pose stream, fused with Wi-Fi-RTT / RSSI ranges, feeds a
+  synthetic-aperture trilateration solver that upgrades RSSI-only emitters to
+  motion-estimated 3D positions. (It needs real device translation, so the
+  sensor-only fallback — orientation but no position — stays RSSI-only by
+  design.) The interferometer seam and the companion pod's real DSP
+  direction-of-arrival round out the higher tiers.
 - **Visualization** — a 3D IQ-helix viewer and a spectrum waterfall fed over the
   WaveFrom wire protocol.
 - **Companion pod** — a Raspberry Pi host (Python) that drives dongles/SDRs the
