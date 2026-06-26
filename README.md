@@ -52,10 +52,11 @@ hardware; every additional radio raises the localization tier it can reach.
 - **Localization** — on the ARCore path the motion-aided localizer is live:
   the cm-level VIO pose stream, fused with Wi-Fi-RTT / RSSI ranges, feeds a
   synthetic-aperture trilateration solver that upgrades RSSI-only emitters to
-  motion-estimated 3D positions. (It needs real device translation, so the
-  sensor-only fallback — orientation but no position — stays RSSI-only by
-  design.) The interferometer seam and the companion pod's real DSP
-  direction-of-arrival round out the higher tiers.
+  motion-estimated 3D positions. On devices without ARCore the same solver runs
+  off a GPS aperture instead — each fix is a pose in a local ENU frame — but GPS's
+  several-metre noise caps those solves to low confidence, so they mainly surface
+  when paired with accurate Wi-Fi-RTT ranges. The interferometer seam and the
+  companion pod's real DSP direction-of-arrival round out the higher tiers.
 - **Visualization** — a 3D IQ-helix viewer and a spectrum waterfall fed over the
   WaveFrom wire protocol.
 - **Companion pod** — a Raspberry Pi host (Python) that drives dongles/SDRs the

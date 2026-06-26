@@ -44,17 +44,26 @@ class SyntheticApertureLocalizer(
             samples.keys.firstOrNull()?.let { samples.remove(it) }
         }
         val buf = samples.getOrPut(detection.trackId) { ArrayDeque() }
-        // Only keep a new sample if the device actually moved since the last one,
-        // otherwise a stationary device floods the buffer with duplicates.
-        if (buf.isEmpty() || buf.last().anchor.distanceTo(pose.position) > MIN_STEP_M) {
+        val accuracy = pose.positionAccuracyM.coerceAtLeast(0f) // guard against bogus negatives
+        // A new anchor only counts as aperture when the device moved further than its
+        // own position noise — otherwise GPS jitter (metres) while standing still would
+        // flood the buffer with fake motion. For ARCore (accuracy 0) this is MIN_STEP_M.
+        val step = maxOf(MIN_STEP_M, accuracy)
+        if (buf.isEmpty() || buf.last().anchor.distanceTo(pose.position) > step) {
             buf.addLast(RangeSample(pose.position, range, weight))
             while (buf.size > maxSamplesPerTrack) buf.removeFirst()
         }
         if (buf.size < minSamples) return null
 
         val loc = Trilateration.solve(buf.toList()) ?: return null
-        if (loc.confidence < minConfidence) return null
-        return Direction.MotionEstimated(loc.position, loc.confidence)
+        // Cap confidence by position noise: a solve is only as trustworthy as the
+        // anchors it was built from. ARCore (0 m) → no penalty; GPS (~8 m) → ~0.11×,
+        // so GPS-aperture estimates stay honestly coarse and usually only surface when
+        // backed by accurate Wi-Fi-RTT ranges.
+        val accPenalty = 1f / (1f + accuracy)
+        val confidence = loc.confidence * accPenalty
+        if (confidence < minConfidence) return null
+        return Direction.MotionEstimated(loc.position, confidence)
     }
 
     /** Range to use for this sample, and how much to trust it. */
