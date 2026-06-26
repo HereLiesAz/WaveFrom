@@ -25,8 +25,13 @@ class SessionStore(context: Context) {
     fun create(name: String): RecordingHandle {
         val file = File(dir, "$name.wfrec")
         val writer = file.bufferedWriter()
-        writer.appendLine(SessionFormat.header())
-        return RecordingHandle(file, writer)
+        try {
+            writer.appendLine(SessionFormat.header())
+            return RecordingHandle(file, writer)
+        } catch (t: Throwable) {
+            runCatching { writer.close() } // don't leak the writer if the header fails
+            throw t
+        }
     }
 
     /** Recordings, newest first. */

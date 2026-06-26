@@ -3,6 +3,7 @@ package com.hereliesaz.wavefrom.signal.repo
 import android.content.Context
 import com.hereliesaz.wavefrom.signal.localize.MotionAidedLocalizer
 import com.hereliesaz.wavefrom.signal.localize.SyntheticApertureLocalizer
+import com.hereliesaz.wavefrom.signal.record.ReplayController
 import com.hereliesaz.wavefrom.signal.record.ReplaySource
 import com.hereliesaz.wavefrom.signal.model.Detection
 import com.hereliesaz.wavefrom.signal.model.Track
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -67,6 +69,9 @@ class SignalRepository(
             *sources.map { src ->
                 src.detections()
                     .catch { /* fail soft: a dead source never kills the merge */ }
+                    // During replay, mute live sources so the overlay shows only the
+                    // recording — the ReplaySource always passes through.
+                    .filter { src is ReplaySource || !ReplayController.isReplaying }
                     .map { det ->
                         // Tier-2 upgrade: motion-aided localizer may resolve a 3D
                         // position from accumulated motion; otherwise unchanged.

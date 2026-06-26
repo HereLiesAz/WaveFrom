@@ -71,7 +71,6 @@ class ArViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Session record & replay -----------------------------------------
     private val sessionStore = SessionStore(app)
-    private var recordingHandle: com.hereliesaz.wavefrom.signal.record.RecordingHandle? = null
     private var recordingJob: Job? = null
     private var recordStartMs = 0L
 
@@ -83,36 +82,54 @@ class ArViewModel(app: Application) : AndroidViewModel(app) {
         ReplayController.active.map { it != null }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    private val _hasRecordings = MutableStateFlow(false)
     /** True when at least one recording exists to replay. */
-    val hasRecordings: StateFlow<Boolean> = MutableStateFlow(sessionStore.list().isNotEmpty())
+    val hasRecordings: StateFlow<Boolean> = _hasRecordings.asStateFlow()
+
+    init {
+        refreshRecordings()
+    }
+
+    private fun refreshRecordings() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _hasRecordings.value = sessionStore.list().isNotEmpty()
+        }
+    }
 
     /** Start capturing the live detection stream to a new file, or stop and flush. */
     fun toggleRecording() {
         if (_isRecording.value) {
-            recordingJob?.cancel()
+            recordingJob?.cancel() // the coroutine's finally closes the handle on its own thread
             recordingJob = null
-            recordingHandle?.close()
-            recordingHandle = null
             _isRecording.value = false
-            (hasRecordings as MutableStateFlow<Boolean>).value = sessionStore.list().isNotEmpty()
+            refreshRecordings()
             return
         }
-        val handle = runCatching { sessionStore.create("session-${System.currentTimeMillis()}") }.getOrNull() ?: return
-        recordingHandle = handle
         recordStartMs = System.currentTimeMillis()
         _isRecording.value = true
         recordingJob = viewModelScope.launch(Dispatchers.IO) {
-            repository.detections.collect { det ->
-                val offset = System.currentTimeMillis() - recordStartMs
-                runCatching { handle.writer.appendLine(SessionFormat.encodeLine(offset, det)) }
+            // Open and close the file entirely on this coroutine's thread, so the
+            // non-thread-safe writer is never touched from the main thread on cancel.
+            val handle = runCatching { sessionStore.create("session-${System.currentTimeMillis()}") }.getOrNull()
+            if (handle == null) {
+                _isRecording.value = false
+                return@launch
+            }
+            try {
+                repository.detections.collect { det ->
+                    val offset = System.currentTimeMillis() - recordStartMs
+                    runCatching { handle.writer.appendLine(SessionFormat.encodeLine(offset, det)) }
+                }
+            } finally {
+                handle.close()
             }
         }
     }
 
     /** Load the newest recording and replay it through the pipeline (loops by default). */
     fun replayLatest() {
-        val newest = sessionStore.list().firstOrNull() ?: return
         viewModelScope.launch(Dispatchers.IO) {
+            val newest = sessionStore.list().firstOrNull() ?: return@launch
             val session = runCatching { sessionStore.load(newest) }.getOrNull() ?: return@launch
             ReplayController.play(session)
         }
@@ -121,8 +138,7 @@ class ArViewModel(app: Application) : AndroidViewModel(app) {
     fun stopReplay() = ReplayController.stop()
 
     override fun onCleared() {
-        recordingJob?.cancel()
-        recordingHandle?.close()
+        recordingJob?.cancel() // finally-block in the recording coroutine closes the handle
         super.onCleared()
     }
 
