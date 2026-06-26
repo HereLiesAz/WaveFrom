@@ -44,10 +44,11 @@ class SyntheticApertureLocalizer(
             samples.keys.firstOrNull()?.let { samples.remove(it) }
         }
         val buf = samples.getOrPut(detection.trackId) { ArrayDeque() }
+        val accuracy = pose.positionAccuracyM.coerceAtLeast(0f) // guard against bogus negatives
         // A new anchor only counts as aperture when the device moved further than its
         // own position noise — otherwise GPS jitter (metres) while standing still would
         // flood the buffer with fake motion. For ARCore (accuracy 0) this is MIN_STEP_M.
-        val step = maxOf(MIN_STEP_M, pose.positionAccuracyM)
+        val step = maxOf(MIN_STEP_M, accuracy)
         if (buf.isEmpty() || buf.last().anchor.distanceTo(pose.position) > step) {
             buf.addLast(RangeSample(pose.position, range, weight))
             while (buf.size > maxSamplesPerTrack) buf.removeFirst()
@@ -59,7 +60,7 @@ class SyntheticApertureLocalizer(
         // anchors it was built from. ARCore (0 m) → no penalty; GPS (~8 m) → ~0.11×,
         // so GPS-aperture estimates stay honestly coarse and usually only surface when
         // backed by accurate Wi-Fi-RTT ranges.
-        val accPenalty = 1f / (1f + pose.positionAccuracyM)
+        val accPenalty = 1f / (1f + accuracy)
         val confidence = loc.confidence * accPenalty
         if (confidence < minConfidence) return null
         return Direction.MotionEstimated(loc.position, confidence)

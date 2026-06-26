@@ -53,7 +53,7 @@ fun ArScreen(viewModel: ArViewModel) {
     // GPS → local-ENU pose feed for the motion-aided localizer (sensor-path aperture).
     val gps = remember { GpsPoseProvider() }
     var devicePos by remember { mutableStateOf<Vec3?>(null) }
-    DisposableEffect(Unit) {
+    DisposableEffect(viewModel) {
         val granted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION,
         ) == PackageManager.PERMISSION_GRANTED
@@ -77,6 +77,8 @@ fun ArScreen(viewModel: ArViewModel) {
                 listener = l
             } catch (e: SecurityException) {
                 // Permission revoked between the check and the request: stay RSSI-only.
+            } catch (e: IllegalArgumentException) {
+                // No GPS provider on this device (or it's disabled): stay RSSI-only.
             }
         }
         onDispose { listener?.let { lm?.removeUpdates(it) } }
@@ -85,7 +87,9 @@ fun ArScreen(viewModel: ArViewModel) {
     // Project motion-estimated emitters to bearings from the current GPS position, so
     // the HUD can place them; pass-through for every other tier. ENU is already true
     // north, so no session offset is needed (unlike the ARCore path).
-    val projected = devicePos?.let { eye -> tracks.map { projectForSensor(it, eye) } } ?: tracks
+    val projected = remember(tracks, devicePos) {
+        devicePos?.let { eye -> tracks.map { projectForSensor(it, eye) } } ?: tracks
+    }
 
     Box(Modifier.fillMaxSize()) {
         CameraPreview(Modifier.fillMaxSize())
