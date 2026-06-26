@@ -4,8 +4,11 @@
 # For real hardware / faster + higher-resolution DSP, install:
 #   numpy        # fast covariance + FFT, and MUSIC high-resolution DoA
 #   pyrtlsdr     # RTL-SDR capture (rtlsdr backend)
+#   soapysdr     # HackRF capture (hackrf backend) — also needs the SoapyHackRF module:
+#                #   apt install soapysdr-module-hackrf  (and numpy for the stream buffer)
 # The KrakenSDR backend additionally needs a running Heimdall DAQ (TCP :5000);
 # the WiFi-CSI backend needs a nexmon_csi NIC streaming CSI UDP (:5500).
 #
 # numpy
 # pyrtlsdr
+# soapysdr

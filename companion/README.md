@@ -64,6 +64,7 @@ Run as a service with `systemd/wavefrom-pod.service`.
 |-------------|-------------|--------------|
 | `simulator` | ✅ working   | synthetic orbiting emitters + spectrum, no RF hardware |
 | `rtlsdr`    | ✅ working   | single RTL-SDR dongle → real power spectrum (waterfall); no DoA (1 antenna) |
+| `hackrf`    | ✅ working   | single HackRF One via SoapySDR → real power spectrum + IQ-helix waveform; no DoA (1 antenna) |
 | `krakensdr` | ✅ working   | coherent 5-ch KrakenSDR via Heimdall DAQ → beamforming DoA → true bearings |
 | `wificsi`   | ✅ working   | Nexmon-CSI NIC → per-frame antenna×subcarrier matrix → beamforming DoA |
 | `ble`       | 🚧 stub     | Bluetooth 5.1 AoA |
@@ -75,6 +76,8 @@ without numpy; install **numpy** for fast covariance + high-resolution MUSIC, an
 
 ### Hardware setup
 - **RTL-SDR:** `python3 -m wavefrom_pod --backend rtlsdr --center-freq 433e6 --sample-rate 2.4e6`
+- **HackRF:** `apt install soapysdr-module-hackrf` (and `pip install soapysdr numpy`), then
+  `python3 -m wavefrom_pod --backend hackrf --center-freq 433e6 --sample-rate 2e6 --gain 16`
 - **KrakenSDR:** run the [Heimdall DAQ](https://github.com/krakenrf/heimdall_daq_fw)
   (serves coherent IQ on TCP :5000), then `--backend krakensdr` (`--radius-m` to match
   your array). Sanity-check against [krakensdr_doa](https://github.com/krakenrf/krakensdr_doa) :8080.

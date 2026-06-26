@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from wavefrom_pod.backends import SimulatorBackend, decimate_iq
+from wavefrom_pod.backends import BACKENDS, HackRfBackend, SimulatorBackend, decimate_iq
 from wavefrom_pod.protocol import Bearing, Spectrum, Waveform, heartbeat
 
 
@@ -55,6 +55,20 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(w.q[0], 0.0)
         self.assertEqual(w.i[1], 8.0)  # stride = 1024 // 128 = 8
         self.assertEqual(w.q[1], -8.0)
+
+    def test_hackrf_registered_and_guards_without_soapy(self):
+        self.assertIn("hackrf", BACKENDS)
+        b = HackRfBackend(center_freq=433e6, sample_rate=2e6, gain="auto", nfft=512)
+        self.assertEqual(b.name, "hackrf")
+        self.assertEqual(b.antenna_count, 1)
+        self.assertEqual(b.gain, 16.0)  # "auto" maps to a default overall RX gain
+        self.assertEqual(HackRfBackend(gain=24).gain, 24.0)  # numeric passes through
+        # No device yet: no cached frames, poll is empty, and start() without SoapySDR fails soft.
+        self.assertIsNone(b.spectrum())
+        self.assertIsNone(b.waveform())
+        self.assertEqual(b.poll(), [])
+        with self.assertRaises(NotImplementedError):
+            b.start()
 
     def test_simulator_produces_spectrum(self):
         s = SimulatorBackend().spectrum()

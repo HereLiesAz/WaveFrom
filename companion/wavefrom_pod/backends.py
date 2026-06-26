@@ -485,10 +485,104 @@ class QuadRfBackend(SensorBackend):
         )
 
 
+class HackRfBackend(SensorBackend):
+    """A single HackRF One via SoapySDR → power spectrum + IQ-helix waveform.
+
+    Like :class:`RtlSdrBackend`, one antenna can't resolve direction, so this emits a
+    spectrum and a decimated IQ window but no bearings. Needs SoapySDR with the
+    SoapyHackRF module (``apt install soapysdr-module-hackrf``; ``pip install soapysdr``)
+    plus numpy for the stream buffer. (Coherent multi-HackRF DoA would need a shared
+    clock — out of scope; the KrakenSDR path covers real DoA.)
+    """
+
+    name = "hackrf"
+    antenna_count = 1
+
+    def __init__(
+        self,
+        center_freq: float = 433_000_000.0,
+        sample_rate: float = 2_000_000.0,
+        gain: object = "auto",
+        nfft: int = 1024,
+        **_: object,
+    ) -> None:
+        self.center_freq = float(center_freq)
+        self.sample_rate = float(sample_rate)
+        self.gain = self._gain_db(gain)
+        self.nfft = int(nfft)
+        self._dev = None
+        self._stream = None
+        self._last_spectrum: Spectrum | None = None
+        self._last_waveform: Waveform | None = None
+
+    @staticmethod
+    def _gain_db(gain: object) -> float:
+        """HackRF wants a numeric overall RX gain; map the CLI's 'auto' to a default."""
+        try:
+            return float(gain)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 16.0
+
+    def start(self) -> None:
+        try:
+            import SoapySDR
+            from SoapySDR import SOAPY_SDR_CF32, SOAPY_SDR_RX
+        except ImportError as e:
+            raise NotImplementedError(
+                "HackRfBackend needs SoapySDR with the SoapyHackRF module "
+                "(apt install soapysdr-module-hackrf; pip install soapysdr)."
+            ) from e
+        self._dev = SoapySDR.Device(dict(driver="hackrf"))
+        self._dev.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
+        self._dev.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
+        self._dev.setGain(SOAPY_SDR_RX, 0, self.gain)
+        self._stream = self._dev.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
+        self._dev.activateStream(self._stream)
+
+    def stop(self) -> None:
+        if self._dev is not None and self._stream is not None:
+            try:
+                self._dev.deactivateStream(self._stream)
+                self._dev.closeStream(self._stream)
+            finally:
+                self._stream = None
+                self._dev = None
+
+    def poll(self) -> list[Bearing]:
+        if self._dev is None or self._stream is None:
+            return []
+        import numpy as np
+
+        from .dsp import detect_peaks, power_spectrum
+
+        buff = np.empty(self.nfft, np.complex64)
+        sr = self._dev.readStream(self._stream, [buff], self.nfft)
+        n = sr.ret if sr.ret > 0 else 0
+        iq = buff[:n].tolist()
+        if not iq:
+            return []
+        freqs, powers = power_spectrum(iq, self.sample_rate, self.center_freq, self.nfft)
+        self._last_spectrum = Spectrum(
+            start_hz=int(self.center_freq - self.sample_rate / 2),
+            bin_hz=int(self.sample_rate / self.nfft),
+            powers_dbm=powers,
+        )
+        detect_peaks(powers, freqs)
+        self._last_waveform = decimate_iq(iq, "hackrf", self.center_freq)
+        return []
+
+    def spectrum(self) -> Spectrum | None:
+        return self._last_spectrum
+
+    def waveform(self) -> Waveform | None:
+        return self._last_waveform
+
+
 #: Registry used by the CLI to select a backend by name.
 BACKENDS: dict[str, type[SensorBackend]] = {
     SimulatorBackend.name: SimulatorBackend,
     RtlSdrBackend.name: RtlSdrBackend,
+    HackRfBackend.name: HackRfBackend,
     KrakenSdrBackend.name: KrakenSdrBackend,
     WifiCsiBackend.name: WifiCsiBackend,
     BleBackend.name: BleBackend,
