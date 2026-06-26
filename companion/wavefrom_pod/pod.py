@@ -14,10 +14,12 @@ def run(
     pod_id: str,
     rate_hz: float = 10.0,
     heartbeat_secs: float = 2.0,
+    waveform_secs: float = 0.5,
 ) -> None:
     """Stream until interrupted. Sends one batch of bearings per tick."""
     interval = 1.0 / rate_hz
     last_hb = 0.0
+    last_wf = 0.0
     backend.start()
     try:
         while True:
@@ -28,6 +30,12 @@ def run(
                 spectrum = backend.spectrum()
                 if spectrum is not None:
                     transport.send_line(spectrum.to_json())
+                # Throttle the IQ window — it's a visual, not every tick needs one.
+                if start - last_wf >= waveform_secs:
+                    waveform = backend.waveform()
+                    if waveform is not None:
+                        transport.send_line(waveform.to_json())
+                    last_wf = start
                 if start - last_hb >= heartbeat_secs:
                     transport.send_line(heartbeat(pod_id, backend.antenna_count))
                     last_hb = start

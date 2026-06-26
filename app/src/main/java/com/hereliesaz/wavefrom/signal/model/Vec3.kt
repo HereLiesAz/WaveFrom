@@ -15,6 +15,19 @@ data class Vec3(val x: Float, val y: Float, val z: Float) {
     fun dot(o: Vec3): Float = x * o.x + y * o.y + z * o.z
     fun distanceTo(o: Vec3): Float = (this - o).length()
 
+    /** Cross product (right-handed). */
+    fun cross(o: Vec3): Vec3 = Vec3(
+        y * o.z - z * o.y,
+        z * o.x - x * o.z,
+        x * o.y - y * o.x,
+    )
+
+    /** Unit vector in the same direction; returns [ZERO] for a zero-length vector. */
+    fun normalize(): Vec3 {
+        val len = length()
+        return if (len < 1e-6f) ZERO else this * (1f / len)
+    }
+
     companion object {
         val ZERO = Vec3(0f, 0f, 0f)
     }

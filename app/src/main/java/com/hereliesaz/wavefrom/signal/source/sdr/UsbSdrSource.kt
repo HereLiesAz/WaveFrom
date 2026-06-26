@@ -6,6 +6,8 @@ import com.hereliesaz.wavefrom.signal.dsp.PowerSpectrum
 import com.hereliesaz.wavefrom.signal.model.Detection
 import com.hereliesaz.wavefrom.signal.model.SourceType
 import com.hereliesaz.wavefrom.signal.source.SignalSource
+import com.hereliesaz.wavefrom.signal.waveform.IqWindow
+import com.hereliesaz.wavefrom.signal.waveform.WaveformSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
@@ -33,8 +35,8 @@ class UsbSdrSource(
 
     override val sourceType = SourceType.EXTERNAL_SDR
 
-    /** True when a recognized USB SDR is plugged in over OTG. */
-    override fun isAvailable(): Boolean = UsbDeviceCatalog.attachedSdrs(context).isNotEmpty()
+    /** True when an RTL2832U dongle is plugged in over OTG (HackRF goes to [HackRfSource]). */
+    override fun isAvailable(): Boolean = UsbDeviceCatalog.attachedRtlSdrs(context).isNotEmpty()
 
     // Explicit type arg: the builder emits no Detection, so T can't be inferred.
     override fun detections(): Flow<Detection> = flow<Detection> {
@@ -50,12 +52,23 @@ class UsbSdrSource(
             while (currentCoroutineContext().isActive) {
                 client.readSamples(nfft, re, im)
                 val powers = PowerSpectrum.computeDb(re.copyOf(), im.copyOf())
+                val now = System.currentTimeMillis()
                 SpectrumBus.publish(
                     SdrMessage.Spectrum(
                         startHz = (centerFreqHz - sampleRateHz / 2).toLong(),
                         binHz = (sampleRateHz / nfft).toLong(),
                         powersDbm = powers,
-                        timestampMs = System.currentTimeMillis(),
+                        timestampMs = now,
+                    ),
+                )
+                // Also surface a decimated time-domain window for the 3D IQ-helix viewer.
+                WaveformBus.publish(
+                    IqFrame(
+                        sourceId = SELF_SOURCE_ID,
+                        label = "USB SDR",
+                        frequencyHz = centerFreqHz.toLong(),
+                        window = decimate(re, im, WAVEFORM_SAMPLES),
+                        timestampMs = now,
                     ),
                 )
             }
@@ -70,5 +83,25 @@ class UsbSdrSource(
 
     private companion object {
         const val TAG = "UsbSdrSource"
+
+        /** Stable id used to match this single-antenna source's helix in the viewer. */
+        const val SELF_SOURCE_ID = "usb-sdr"
+
+        /** Helix sample count — enough to read the modulation, cheap to draw. */
+        const val WAVEFORM_SAMPLES = 256
+
+        /** Evenly subsample [n] complex samples down to [out] for the helix. */
+        fun decimate(re: FloatArray, im: FloatArray, out: Int): IqWindow {
+            val n = re.size
+            val take = minOf(out, n)
+            val stride = if (take > 0) n / take else 1
+            val i = FloatArray(take)
+            val q = FloatArray(take)
+            for (k in 0 until take) {
+                i[k] = re[k * stride]
+                q[k] = im[k * stride]
+            }
+            return IqWindow(i, q, WaveformSource.REAL)
+        }
     }
 }

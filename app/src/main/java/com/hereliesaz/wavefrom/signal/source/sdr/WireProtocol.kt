@@ -56,6 +56,18 @@ object WireProtocol {
                 antennaCount = json.optInt("antennaCount", 1),
                 timestampMs = ts,
             )
+            "waveform" -> {
+                val iArr = json.optJSONArray("i") ?: return null
+                val qArr = json.optJSONArray("q") ?: return null
+                val n = minOf(iArr.length(), qArr.length())
+                SdrMessage.Waveform(
+                    trackId = json.optString("trackId", "sdr"),
+                    frequencyHz = json.optDouble("freqHz", 0.0).toLong(),
+                    i = FloatArray(n) { iArr.optDouble(it, 0.0).toFloat() },
+                    q = FloatArray(n) { qArr.optDouble(it, 0.0).toFloat() },
+                    timestampMs = ts,
+                )
+            }
             else -> null
         }
     }

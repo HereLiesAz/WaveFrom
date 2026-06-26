@@ -2,8 +2,8 @@
 import json
 import unittest
 
-from wavefrom_pod.backends import SimulatorBackend
-from wavefrom_pod.protocol import Bearing, Spectrum, heartbeat
+from wavefrom_pod.backends import BACKENDS, HackRfBackend, SimulatorBackend, decimate_iq
+from wavefrom_pod.protocol import Bearing, Spectrum, Waveform, heartbeat
 
 
 class ProtocolTest(unittest.TestCase):
@@ -32,6 +32,43 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(d["type"], "spectrum")
         self.assertEqual(d["startHz"], int(2.4e9))
         self.assertEqual(len(d["powersDbm"]), 3)
+
+    def test_waveform_json_matches_android_contract(self):
+        w = Waveform("krk-0", int(5.8e9), i=[0.0, 1.0, -0.5], q=[1.0, 0.0, 0.5])
+        d = json.loads(w.to_json(ts_ms=1719100000000))
+        self.assertEqual(d["type"], "waveform")
+        self.assertEqual(d["trackId"], "krk-0")
+        self.assertEqual(d["freqHz"], 5800000000)
+        self.assertEqual(d["i"], [0.0, 1.0, -0.5])
+        self.assertEqual(d["q"], [1.0, 0.0, 0.5])
+        self.assertEqual(d["ts"], 1719100000000)
+
+    def test_decimate_iq_subsamples_complex_stream(self):
+        iq = [complex(n, -n) for n in range(1024)]
+        w = decimate_iq(iq, "rtl", 100e6, n=128)
+        self.assertEqual(w.track_id, "rtl")
+        self.assertEqual(w.freq_hz, 100_000_000)
+        self.assertEqual(len(w.i), 128)
+        self.assertEqual(len(w.q), 128)
+        # First sample preserved; real/imag split correctly.
+        self.assertEqual(w.i[0], 0.0)
+        self.assertEqual(w.q[0], 0.0)
+        self.assertEqual(w.i[1], 8.0)  # stride = 1024 // 128 = 8
+        self.assertEqual(w.q[1], -8.0)
+
+    def test_hackrf_registered_and_guards_without_soapy(self):
+        self.assertIn("hackrf", BACKENDS)
+        b = HackRfBackend(center_freq=433e6, sample_rate=2e6, gain="auto", nfft=512)
+        self.assertEqual(b.name, "hackrf")
+        self.assertEqual(b.antenna_count, 1)
+        self.assertEqual(b.gain, 16.0)  # "auto" maps to a default overall RX gain
+        self.assertEqual(HackRfBackend(gain=24).gain, 24.0)  # numeric passes through
+        # No device yet: no cached frames, poll is empty, and start() without SoapySDR fails soft.
+        self.assertIsNone(b.spectrum())
+        self.assertIsNone(b.waveform())
+        self.assertEqual(b.poll(), [])
+        with self.assertRaises(NotImplementedError):
+            b.start()
 
     def test_simulator_produces_spectrum(self):
         s = SimulatorBackend().spectrum()

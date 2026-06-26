@@ -48,3 +48,10 @@ are scaffolded for later phases.
 ./gradlew assembleDebug      # APK
 ./gradlew testDebugUnitTest  # JVM unit tests (domain logic)
 ```
+
+## License
+
+WaveFrom is licensed under the **GNU General Public License, version 2 or later**
+(see [LICENSE](LICENSE)). On-phone HackRF support vendors Dennis Mantz's GPL
+[`hackrf_android`](https://github.com/demantz/hackrf_android) library, so the app as
+a whole is GPL. See [NOTICE](NOTICE) for third-party attribution.

@@ -10,6 +10,7 @@ import com.hereliesaz.wavefrom.signal.source.ble.BleScanSource
 import com.hereliesaz.wavefrom.signal.source.cellular.CellularScanSource
 import com.hereliesaz.wavefrom.signal.source.debug.FakeBearingSource
 import com.hereliesaz.wavefrom.signal.source.dualradio.DualRadioSource
+import com.hereliesaz.wavefrom.signal.source.sdr.HackRfSource
 import com.hereliesaz.wavefrom.signal.source.sdr.NetworkSdrSource
 import com.hereliesaz.wavefrom.signal.source.sdr.UsbSdrSource
 import com.hereliesaz.wavefrom.signal.source.wifi.WifiRttSource
@@ -87,8 +88,9 @@ class SignalRepository(
                 // Listens for the Raspberry Pi pod / external SDR, which broadcasts
                 // bearings on the LAN by default — zero-config on the same network.
                 add(NetworkSdrSource())
-                // USB OTG paths report availability now; emit once DSP lands.
+                // USB-OTG SDRs: RTL-SDR via rtl_tcp_andro, HackRF driven directly.
                 add(UsbSdrSource(context))
+                add(HackRfSource(context))
                 add(DualRadioSource(context))
                 if (includeSimulated) add(FakeBearingSource())
             }

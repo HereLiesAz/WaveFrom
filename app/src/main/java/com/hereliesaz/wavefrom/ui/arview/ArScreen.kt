@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hereliesaz.wavefrom.ar.frame.BearingFrame
@@ -17,6 +20,10 @@ import com.hereliesaz.wavefrom.ar.frame.BearingFrame
 fun ArScreen(viewModel: ArViewModel) {
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val orientation by viewModel.orientation.collectAsStateWithLifecycle()
+    val liveWaveform by viewModel.liveWaveform.collectAsStateWithLifecycle()
+    var showArHelix by remember { mutableStateOf(false) }
+    // Only offer the Live-IQ button while an SDR window is actually arriving.
+    val freshWaveform = liveWaveform?.takeIf { System.currentTimeMillis() - it.timestampMs < 3_000 }
 
     Box(Modifier.fillMaxSize()) {
         CameraPreview(Modifier.fillMaxSize())
@@ -26,11 +33,17 @@ fun ArScreen(viewModel: ArViewModel) {
             headingFrame = BearingFrame.MAGNETIC_NORTH,
             targetFrame = BearingFrame.SDR_ARRAY,
             modifier = Modifier.fillMaxSize(),
+            onSelectTrack = viewModel::selectTrack,
+            showArHelix = showArHelix,
         )
         HudControls(
             orientation = orientation,
             tracks = tracks,
             headingFrame = BearingFrame.MAGNETIC_NORTH,
+            showArHelix = showArHelix,
+            onToggleArHelix = { showArHelix = !showArHelix },
+            liveWaveformLabel = freshWaveform?.label,
+            onOpenLiveWaveform = { freshWaveform?.let { viewModel.selectTrack(it.sourceId) } },
         )
     }
 }

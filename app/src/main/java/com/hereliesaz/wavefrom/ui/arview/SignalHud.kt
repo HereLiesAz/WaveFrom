@@ -2,6 +2,7 @@ package com.hereliesaz.wavefrom.ui.arview
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,11 +18,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,11 +33,15 @@ import com.hereliesaz.wavefrom.ar.frame.BearingFrame
 import com.hereliesaz.wavefrom.ar.frame.CalibrationConfig
 import com.hereliesaz.wavefrom.ar.frame.FrameMath
 import com.hereliesaz.wavefrom.ar.sensor.DeviceOrientation
+import com.hereliesaz.wavefrom.ar.sensor.ScreenPoint
 import com.hereliesaz.wavefrom.ar.sensor.ScreenProjection
 import com.hereliesaz.wavefrom.signal.model.Direction
 import com.hereliesaz.wavefrom.signal.model.SourceType
 import com.hereliesaz.wavefrom.signal.model.Track
+import com.hereliesaz.wavefrom.signal.model.Vec3
 import com.hereliesaz.wavefrom.signal.physics.BandColor
+import com.hereliesaz.wavefrom.signal.waveform.AnchoredHelixProjection
+import com.hereliesaz.wavefrom.signal.waveform.HelixGeometry
 import kotlin.math.atan
 import kotlin.math.roundToInt
 import kotlin.math.tan
@@ -54,6 +61,8 @@ fun SignalHud(
     headingFrame: BearingFrame,
     targetFrame: BearingFrame,
     modifier: Modifier = Modifier,
+    onSelectTrack: (String) -> Unit = {},
+    showArHelix: Boolean = false,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat()
@@ -70,26 +79,19 @@ fun SignalHud(
         val cfg = CalibrationConfig.state
         val headingTrue = FrameMath.headingToTrue(headingFrame, orientation.azimuthDeg, cfg)
 
-        Canvas(Modifier.fillMaxSize()) {
-            val c = Offset(size.width / 2f, size.height / 2f)
-            drawCircle(Color.White.copy(alpha = 0.5f), radius = 6f, center = c)
-            drawCircle(Color.White.copy(alpha = 0.2f), radius = 48f, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(2f))
-        }
-
-        val now = System.currentTimeMillis()
-
-        tracks.forEach { track ->
-            val bearing = track.bearingOrNull() ?: return@forEach
-            // Only an external SDR reports azimuth in its array frame; everything
-            // else (e.g. interferometric) is already in the heading frame, so we
-            // must not double-offset it.
+        // Project each bearing track once; reused by the optional helix overlay and the
+        // markers (this path recomposes on every orientation update, so avoid re-projecting).
+        val bearingPoints = tracks.mapNotNull { track ->
+            val bearing = track.bearingOrNull() ?: return@mapNotNull null
+            // Only an external SDR reports azimuth in its array frame; everything else
+            // (e.g. interferometric) is already in the heading frame — don't double-offset.
             val targetAz =
                 if (targetFrame == BearingFrame.SDR_ARRAY && track.sourceType == SourceType.EXTERNAL_SDR) {
                     FrameMath.sdrArrayToTrue(bearing.azimuth, cfg.sdrArrayOffsetDeg)
                 } else {
                     bearing.azimuth
                 }
-            val point = ScreenProjection.project(
+            val p = ScreenProjection.project(
                 targetAzimuthDeg = targetAz,
                 targetElevationDeg = bearing.elevation,
                 headingDeg = headingTrue,
@@ -98,8 +100,37 @@ fun SignalHud(
                 verticalFovDeg = vFov,
                 widthPx = widthPx,
                 heightPx = heightPx,
-            ) ?: return@forEach
-            BearingMarker(track, bearing.ambiguous, point.x, point.y, stalenessAlpha(track.ageMs(now)))
+            ) ?: return@mapNotNull null
+            Triple(track, bearing, p)
+        }
+
+        // Unit helix geometry per bearing track. Its shape depends only on frequency
+        // (stable per id; fromIq autoscales the power away), so cache it across the
+        // orientation updates that drive recomposition. Only built while the toggle is on.
+        val helixById = remember(showArHelix, bearingPoints.map { it.first.id }) {
+            if (!showArHelix) {
+                emptyMap()
+            } else {
+                bearingPoints.associate { (t, _, _) ->
+                    t.id to HelixGeometry.fromIq(HelixGeometry.parametric(t, samples = 96))
+                }
+            }
+        }
+
+        Canvas(Modifier.fillMaxSize()) {
+            val c = Offset(size.width / 2f, size.height / 2f)
+            drawCircle(Color.White.copy(alpha = 0.5f), radius = 6f, center = c)
+            drawCircle(Color.White.copy(alpha = 0.2f), radius = 48f, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(2f))
+            if (showArHelix) {
+                bearingPoints.forEach { (track, _, p) ->
+                    helixById[track.id]?.let { drawAnchoredHelix(track, p, c, it) }
+                }
+            }
+        }
+
+        val now = System.currentTimeMillis()
+        bearingPoints.forEach { (track, bearing, p) ->
+            BearingMarker(track, bearing.ambiguous, p.x, p.y, stalenessAlpha(track.ageMs(now)), onSelectTrack)
         }
 
         val rssiTracks = tracks.filter { it.direction is Direction.RssiOnly }
@@ -108,6 +139,7 @@ fun SignalHud(
                 rssiTracks,
                 now,
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                onSelectTrack,
             )
         }
     }
@@ -140,6 +172,33 @@ private fun fuzzyDistanceLabel(distanceM: Float, confidence: Float): String {
     return if (hi - lo <= 1) "~$hi m" else "~$lo–$hi m"
 }
 
+/**
+ * Draw a track's IQ helix as a small foreshortened "spring" pinned at its marker. Its
+ * time axis points from the marker toward the crosshair (the line of sight), giving the
+ * AR overlay an at-a-glance 3D shape; the full interactive helix is the standalone viewer.
+ */
+private fun DrawScope.drawAnchoredHelix(track: Track, point: ScreenPoint, reticle: Offset, local: List<Vec3>) {
+    val radiusPx = ((track.smoothedPowerDbm + 90f) / 60f).coerceIn(0f, 1f) * 10f + 10f
+    val proj = AnchoredHelixProjection.project(
+        points = local,
+        center = point,
+        axisX = reticle.x - point.x,
+        axisY = reticle.y - point.y,
+        radiusPx = radiusPx,
+        lengthPx = 70f,
+    )
+    val color = Color(BandColor.argb(track.band))
+    for (n in 0 until proj.size - 1) {
+        val t = n.toFloat() / proj.size
+        drawLine(
+            color = color.copy(alpha = 0.25f + 0.55f * t),
+            start = Offset(proj[n].x, proj[n].y),
+            end = Offset(proj[n + 1].x, proj[n + 1].y),
+            strokeWidth = 3f,
+        )
+    }
+}
+
 private data class Bearing(val azimuth: Float, val elevation: Float, val ambiguous: Boolean)
 
 private fun Track.bearingOrNull(): Bearing? = when (val d = direction) {
@@ -149,15 +208,26 @@ private fun Track.bearingOrNull(): Bearing? = when (val d = direction) {
 }
 
 @Composable
-private fun BearingMarker(track: Track, ambiguous: Boolean, x: Float, y: Float, staleAlpha: Float) {
+private fun BearingMarker(
+    track: Track,
+    ambiguous: Boolean,
+    x: Float,
+    y: Float,
+    staleAlpha: Float,
+    onSelectTrack: (String) -> Unit,
+) {
     val color = Color(BandColor.argb(track.band))
     // Strong signals render larger.
     val radiusDp = ((track.smoothedPowerDbm + 90f) / 60f).coerceIn(0f, 1f) * 14f + 8f
+    // Cache the clickable modifier so this frequently-recomposed path doesn't allocate
+    // a new lambda each orientation update.
+    val clickMod = remember(track.id, onSelectTrack) { Modifier.clickable { onSelectTrack(track.id) } }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         // Measure the marker and place it centered on (x, y) in pixels, converting
         // the dp dot radius to px so it stays correct at any screen density.
-        modifier = Modifier.layout { measurable, constraints ->
+        modifier = clickMod
+            .layout { measurable, constraints ->
             val placeable = measurable.measure(constraints)
             val radiusPx = radiusDp.dp.toPx()
             layout(placeable.width, placeable.height) {
@@ -189,7 +259,12 @@ private fun BearingMarker(track: Track, ambiguous: Boolean, x: Float, y: Float, 
 }
 
 @Composable
-private fun NearbyStrip(tracks: List<Track>, now: Long, modifier: Modifier = Modifier) {
+private fun NearbyStrip(
+    tracks: List<Track>,
+    now: Long,
+    modifier: Modifier = Modifier,
+    onSelectTrack: (String) -> Unit = {},
+) {
     Column(
         modifier
             .background(Color.Black.copy(alpha = 0.45f))
@@ -208,20 +283,22 @@ private fun NearbyStrip(tracks: List<Track>, now: Long, modifier: Modifier = Mod
                 .padding(top = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            tracks.take(24).forEach { NearbyChip(it, stalenessAlpha(it.ageMs(now))) }
+            tracks.take(24).forEach { NearbyChip(it, stalenessAlpha(it.ageMs(now)), onSelectTrack) }
         }
     }
 }
 
 @Composable
-private fun NearbyChip(track: Track, staleAlpha: Float) {
+private fun NearbyChip(track: Track, staleAlpha: Float, onSelectTrack: (String) -> Unit = {}) {
     val color = Color(BandColor.argb(track.band))
     val rssi = track.direction as? Direction.RssiOnly
     val label = rssi?.estimatedDistanceM?.let { fuzzyDistanceLabel(it, rssi.confidence) }
         ?: track.band.displayName
+    val clickMod = remember(track.id, onSelectTrack) { Modifier.clickable { onSelectTrack(track.id) } }
     Row(
         Modifier
             .clip(RoundedCornerShape(12.dp))
+            .then(clickMod)
             .background(Color.White.copy(alpha = 0.08f * staleAlpha))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
