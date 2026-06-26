@@ -28,8 +28,3 @@ Thumbs.db
 # Generated google-services.json (rendered from template by CI)
 app/google-services.json
 .kotlin/
-
-# Release signing keystore (decoded from CI secret; never commit)
-release.jks
-*.jks
-*.keystore

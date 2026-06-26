@@ -87,7 +87,7 @@ android {
     // Release signing from CI secrets (keystore path via KEYSTORE_FILE, else repo-root
     // release.jks). Applied only when the keystore is present, so local debug builds and
     // PR/fork CI (no secrets) still build unsigned and never fail for missing keystore.
-    val releaseKeystore = System.getenv("KEYSTORE_FILE")?.let { file(it) }
+    val releaseKeystore = System.getenv("KEYSTORE_FILE")?.let { rootProject.file(it) }
         ?: rootProject.file("release.jks")
     val hasReleaseKeystore = releaseKeystore.exists()
     signingConfigs {
