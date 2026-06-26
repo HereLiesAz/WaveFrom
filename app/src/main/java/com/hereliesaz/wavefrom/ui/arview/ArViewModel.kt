@@ -86,6 +86,9 @@ class ArViewModel(app: Application) : AndroidViewModel(app) {
     private val _mapPose = MutableStateFlow(MapPose())
     val mapPose: StateFlow<MapPose> = _mapPose.asStateFlow()
 
+    /** Breadcrumb history for the map, held here so it survives map close + rotation. */
+    val trackTrails = com.hereliesaz.wavefrom.ar.map.TrackTrails()
+
     fun updateMapPose(
         eye: com.hereliesaz.wavefrom.signal.model.Vec3,
         sessionToTrueDeg: Float,

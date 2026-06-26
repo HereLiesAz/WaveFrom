@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -92,12 +93,16 @@ fun ArScreen(viewModel: ArViewModel) {
 
     // Push the user's pose to the top-down map: GPS/ENU is already true north, so the
     // session→true rotation is 0; the user's lat/lon comes from the GPS origin.
-    LaunchedEffect(devicePos, orientation) {
-        val eye = devicePos ?: return@LaunchedEffect
-        val headingTrue = FrameMath.headingToTrue(
-            BearingFrame.MAGNETIC_NORTH, orientation.azimuthDeg, CalibrationConfig.state,
-        )
-        viewModel.updateMapPose(eye, 0f, headingTrue, gps.toGeo(eye))
+    // snapshotFlow (not LaunchedEffect keys) so high-frequency orientation updates don't
+    // churn the coroutine — one collector reacts to whichever state changes.
+    LaunchedEffect(Unit) {
+        snapshotFlow { Pair(devicePos, orientation) }.collect { (pos, orient) ->
+            val eye = pos ?: return@collect
+            val headingTrue = FrameMath.headingToTrue(
+                BearingFrame.MAGNETIC_NORTH, orient.azimuthDeg, CalibrationConfig.state,
+            )
+            viewModel.updateMapPose(eye, 0f, headingTrue, gps.toGeo(eye))
+        }
     }
 
     // Project motion-estimated emitters to bearings from the current GPS position, so

@@ -59,9 +59,12 @@ class GpsPoseProvider {
         val east = local.x.toDouble()
         val up = local.y.toDouble()
         val north = -local.z.toDouble() // world z = -north
+        // Guard the longitude scale against a ~pole origin (cos(lat)→0); longitude is
+        // degenerate there anyway, but this keeps the result finite.
+        val cosLat = if (kotlin.math.abs(cosLat0) < 1e-9) 1e-9 else cosLat0
         return GeoPoint(
             latDeg = lat0 + north / DEG_TO_M,
-            lonDeg = lon0 + east / (DEG_TO_M * cosLat0),
+            lonDeg = lon0 + east / (DEG_TO_M * cosLat),
             altM = alt0 + up,
         )
     }

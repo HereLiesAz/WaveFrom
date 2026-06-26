@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -31,7 +32,6 @@ import com.hereliesaz.wavefrom.ar.map.RadarModel
 import com.hereliesaz.wavefrom.ar.map.RadarProjection
 import com.hereliesaz.wavefrom.ar.map.TrackTrails
 import com.hereliesaz.wavefrom.signal.physics.BandColor
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -47,23 +47,30 @@ fun MapScreen(viewModel: ArViewModel, onClose: () -> Unit, modifier: Modifier = 
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val pose by viewModel.mapPose.collectAsStateWithLifecycle()
 
-    val blips = remember(tracks, pose) {
+    val blips = remember(tracks, pose, CalibrationConfig.sdrArrayOffsetDeg) {
         RadarModel.build(tracks, pose.eye, pose.sessionToTrueDeg, CalibrationConfig.sdrArrayOffsetDeg)
     }
-    val trails = remember { TrackTrails() }
-    LaunchedEffect(blips) {
-        blips.filterIsInstance<RadarBlip.Located>().forEach { trails.add(it.track.id, it.east, it.north) }
-    }
+    // Trails live in the ViewModel so they survive map close + rotation.
+    val trails = viewModel.trackTrails
 
     val labelPaint = remember { Paint().apply { isAntiAlias = true; textSize = 28f; color = android.graphics.Color.WHITE } }
     val ringPaint = remember { Paint().apply { isAntiAlias = true; textSize = 24f; color = 0x99FFFFFF.toInt() } }
+    // Hoisted out of the draw scope to avoid per-frame allocations.
+    val dash = remember { PathEffect.dashPathEffect(floatArrayOf(10f, 10f)) }
+    val userPath = remember {
+        Path().apply { moveTo(0f, -18f); lineTo(-11f, 12f); lineTo(11f, 12f); close() }
+    }
 
     val located = blips.filterIsInstance<RadarBlip.Located>()
     val rings = blips.filterIsInstance<RadarBlip.Ring>()
     val rays = blips.filterIsInstance<RadarBlip.Ray>()
-    val maxRange = max(
+    LaunchedEffect(located) {
+        located.forEach { trails.add(it.track.id, it.east, it.north) }
+    }
+    val maxRange = maxOf(
         MIN_RANGE_M,
-        (located.map { it.rangeM } + rings.map { it.rangeM }).maxOrNull() ?: MIN_RANGE_M,
+        located.maxOfOrNull { it.rangeM } ?: MIN_RANGE_M,
+        rings.maxOfOrNull { it.rangeM } ?: MIN_RANGE_M,
     )
 
     Box(modifier.fillMaxSize().background(Color(0xFF0B0F14))) {
@@ -86,7 +93,6 @@ fun MapScreen(viewModel: ArViewModel, onClose: () -> Unit, modifier: Modifier = 
             }
 
             // Bearing-only: direction known, range unknown → a ray to the map edge.
-            val dash = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
             rays.forEach { ray ->
                 val color = Color(BandColor.argb(ray.track.band))
                 drawRay(cx, cy, ray.azimuthTrueDeg, maxRange, mpp, color.copy(alpha = 0.7f), dash)
@@ -109,7 +115,7 @@ fun MapScreen(viewModel: ArViewModel, onClose: () -> Unit, modifier: Modifier = 
                 )
             }
 
-            drawUser(cx, cy, pose.headingDeg)
+            drawUser(cx, cy, pose.headingDeg, userPath)
         }
 
         Column(Modifier.align(Alignment.TopStart).padding(12.dp)) {
@@ -132,8 +138,8 @@ fun MapScreen(viewModel: ArViewModel, onClose: () -> Unit, modifier: Modifier = 
 private fun DrawScope.drawRangeRings(
     cx: Float, cy: Float, radiusPx: Float, maxRange: Float, mpp: Float, paint: Paint,
 ) {
-    for (frac in listOf(0.25f, 0.5f, 0.75f, 1f)) {
-        val rPx = radiusPx * frac
+    for (i in 1..4) {
+        val rPx = radiusPx * (i * 0.25f)
         drawCircle(Color.White.copy(alpha = 0.10f), radius = rPx, center = Offset(cx, cy), style = Stroke(2f))
         val metres = (rPx * mpp).roundToInt()
         drawContext.canvas.nativeCanvas.drawText("${metres}m", cx + 4f, cy - rPx + 22f, paint)
@@ -153,15 +159,12 @@ private fun DrawScope.drawRay(
     drawLine(color, Offset(cx, cy), Offset(end.x, end.y), strokeWidth = 3f, pathEffect = dash)
 }
 
-private fun DrawScope.drawUser(cx: Float, cy: Float, headingDeg: Float) {
-    rotate(headingDeg, pivot = Offset(cx, cy)) {
-        val path = Path().apply {
-            moveTo(cx, cy - 18f)
-            lineTo(cx - 11f, cy + 12f)
-            lineTo(cx + 11f, cy + 12f)
-            close()
+private fun DrawScope.drawUser(cx: Float, cy: Float, headingDeg: Float, userPath: Path) {
+    // userPath is built once around (0,0); translate to the centre and rotate by heading.
+    translate(cx, cy) {
+        rotate(headingDeg, pivot = Offset.Zero) {
+            drawPath(userPath, Color(0xFF4CC2FF))
         }
-        drawPath(path, Color(0xFF4CC2FF))
     }
     drawCircle(Color.White, radius = 3f, center = Offset(cx, cy))
 }
