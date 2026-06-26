@@ -13,27 +13,43 @@ import android.hardware.usb.UsbManager
  */
 object UsbDeviceCatalog {
 
-    data class KnownDevice(val vendorId: Int, val productId: Int, val name: String)
+    /** How an SDR is captured, so each source claims only the devices it can drive. */
+    enum class SdrKind { RTL_SDR, HACKRF, OTHER }
+
+    data class KnownDevice(val vendorId: Int, val productId: Int, val name: String, val kind: SdrKind)
 
     /** Common USB SDRs by USB vendor:product id. */
     val KNOWN_SDRS = listOf(
-        KnownDevice(0x0bda, 0x2838, "RTL-SDR (RTL2832U)"),
-        KnownDevice(0x0bda, 0x2832, "RTL-SDR (RTL2832U)"),
-        KnownDevice(0x1d50, 0x6089, "HackRF One"),
-        KnownDevice(0x1d50, 0x60a1, "Airspy"),
-        KnownDevice(0x1d50, 0x6108, "Myriad-RF LimeSDR"),
+        KnownDevice(0x0bda, 0x2838, "RTL-SDR (RTL2832U)", SdrKind.RTL_SDR),
+        KnownDevice(0x0bda, 0x2832, "RTL-SDR (RTL2832U)", SdrKind.RTL_SDR),
+        KnownDevice(0x1d50, 0x6089, "HackRF One", SdrKind.HACKRF),
+        KnownDevice(0x1d50, 0x60a1, "Airspy", SdrKind.OTHER),
+        KnownDevice(0x1d50, 0x6108, "Myriad-RF LimeSDR", SdrKind.OTHER),
     )
 
     private fun manager(context: Context): UsbManager? =
         context.applicationContext.getSystemService(Context.USB_SERVICE) as? UsbManager
 
-    /** Attached USB devices recognized as SDRs. */
+    /** Attached USB devices recognized as SDRs (any kind). */
     fun attachedSdrs(context: Context): List<UsbDevice> {
         val devices = manager(context)?.deviceList?.values ?: return emptyList()
         return devices.filter { dev ->
             KNOWN_SDRS.any { it.vendorId == dev.vendorId && it.productId == dev.productId }
         }
     }
+
+    private fun attachedOfKind(context: Context, kind: SdrKind): List<UsbDevice> {
+        val devices = manager(context)?.deviceList?.values ?: return emptyList()
+        return devices.filter { dev ->
+            KNOWN_SDRS.any { it.kind == kind && it.vendorId == dev.vendorId && it.productId == dev.productId }
+        }
+    }
+
+    /** Attached RTL2832U dongles (driven via rtl_tcp_andro by [UsbSdrSource]). */
+    fun attachedRtlSdrs(context: Context): List<UsbDevice> = attachedOfKind(context, SdrKind.RTL_SDR)
+
+    /** Attached HackRF devices (driven directly by [HackRfSource]). */
+    fun attachedHackRfs(context: Context): List<UsbDevice> = attachedOfKind(context, SdrKind.HACKRF)
 
     /**
      * Attached USB devices that look like a wireless radio (Wi-Fi/BT dongle),

@@ -35,8 +35,8 @@ class UsbSdrSource(
 
     override val sourceType = SourceType.EXTERNAL_SDR
 
-    /** True when a recognized USB SDR is plugged in over OTG. */
-    override fun isAvailable(): Boolean = UsbDeviceCatalog.attachedSdrs(context).isNotEmpty()
+    /** True when an RTL2832U dongle is plugged in over OTG (HackRF goes to [HackRfSource]). */
+    override fun isAvailable(): Boolean = UsbDeviceCatalog.attachedRtlSdrs(context).isNotEmpty()
 
     // Explicit type arg: the builder emits no Detection, so T can't be inferred.
     override fun detections(): Flow<Detection> = flow<Detection> {
