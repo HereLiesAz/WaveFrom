@@ -47,3 +47,23 @@ offsets, the ARCore seed flag, the centered SDR pick, and the last cell→tower 
    tower's database coordinates to sanity-check).
 4. **Opt-in check:** build with a blank key and confirm cells stay range-only (no bearing,
    no network calls) — the feature must never be a hard dependency.
+
+## 4. 3D IQ-helix waveform
+
+The geometry/projection is unit-tested (`HelixGeometryTest`, `OrbitProjectionTest`,
+`AnchoredHelixProjectionTest`, `WireProtocolWaveformTest`); these checks confirm the live
+rendering and the real-IQ paths on a device.
+
+1. **Parametric (any signal):** with WiFi/BLE/cellular markers on screen, tap one. The 3D
+   viewer opens with a spinning band-colored helix and a **PARAMETRIC** badge; drag orbits,
+   pinch zooms. Tapping a nearby-strip chip works too. Close returns to the camera view.
+2. **AR-anchored:** toggle **AR helix** — each bearing track grows a small foreshortened
+   helix pinned at its marker, pointing along the line of sight; confirm it tracks as you
+   move and doesn't open the full viewer.
+3. **Real on-phone IQ:** attach an RTL-SDR over OTG and start `rtl_tcp_andro`. A **⌁ USB
+   SDR** button appears; tap it — the viewer shows a **REAL** badge and the helix reacts to
+   the live signal (twist = true baseband modulation), not a synthetic spin.
+4. **Real network IQ:** run the Pi pod with `--backend krakensdr` (or `rtlsdr`). A Kraken
+   bearing marker, when tapped, shows a REAL helix for that located emitter; a single-antenna
+   `rtlsdr` pod surfaces via the **⌁ USB SDR**-style Live IQ button. Confirm the helix
+   updates at roughly the pod's `waveform` rate (~2 Hz) and the link stays light.
