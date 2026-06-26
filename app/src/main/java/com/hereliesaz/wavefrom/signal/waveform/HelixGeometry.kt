@@ -4,7 +4,7 @@ import com.hereliesaz.wavefrom.signal.model.SignalBand
 import com.hereliesaz.wavefrom.signal.model.Track
 import com.hereliesaz.wavefrom.signal.model.Vec3
 import kotlin.math.cos
-import kotlin.math.ln
+import kotlin.math.log10
 import kotlin.math.sin
 
 /**
@@ -29,7 +29,7 @@ object HelixGeometry {
     fun cyclesFor(frequencyHz: Long): Float {
         val hz = frequencyHz.coerceAtLeast(1L).toDouble()
         // log10(1e8)=8 -> ~2 turns, log10(6e9)=9.78 -> ~10 turns.
-        val turns = (ln(hz) / ln(10.0) - 6.0) * 4.0
+        val turns = (log10(hz) - 6.0) * 4.0
         return turns.coerceIn(2.0, 12.0).toFloat()
     }
 

@@ -92,7 +92,6 @@ fun WaveformViewer3D(
             val cam = OrbitCamera(spin + dragAz, elevation, distance)
             val w = size.width
             val h = size.height
-            val projected = points.map { OrbitProjection.project(it, cam, FOV_DEG, w, h) }
 
             // Faint axes (I / Q / time) for orientation.
             val axisLen = HelixGeometry.AXIS_LENGTH / 2f
@@ -100,11 +99,16 @@ fun WaveformViewer3D(
             drawAxis(cam, w, h, Vec3(0f, axisLen, 0f), Color(0x5566D9FF))
             drawAxis(cam, w, h, Vec3(0f, 0f, axisLen), Color(0x55FFFFFF))
 
-            for (n in 0 until projected.size - 1) {
-                val a = projected[n] ?: continue
-                val b = projected[n + 1] ?: continue
+            // Project on the fly in a single pass (this draws ~60×/s during the spin, so
+            // avoid allocating an intermediate list each frame).
+            var prev = if (points.isNotEmpty()) OrbitProjection.project(points[0], cam, FOV_DEG, w, h) else null
+            for (n in 1 until points.size) {
+                val a = prev
+                val b = OrbitProjection.project(points[n], cam, FOV_DEG, w, h)
+                prev = b
+                if (a == null || b == null) continue
                 // Brighten along the time axis so the corkscrew reads as 3D.
-                val t = n.toFloat() / projected.size
+                val t = (n - 1).toFloat() / points.size
                 drawLine(
                     color = color.copy(alpha = 0.35f + 0.65f * t),
                     start = Offset(a.x, a.y),

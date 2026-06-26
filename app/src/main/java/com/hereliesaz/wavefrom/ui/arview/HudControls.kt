@@ -48,6 +48,8 @@ fun HudControls(
     tracks: List<Track>,
     headingFrame: BearingFrame,
     modifier: Modifier = Modifier,
+    showArHelix: Boolean = false,
+    onToggleArHelix: () -> Unit = {},
 ) {
     var showWaterfall by remember { mutableStateOf(false) }
     var showCalibrate by remember { mutableStateOf(false) }
@@ -65,6 +67,9 @@ fun HudControls(
         ) {
             FilledTonalButton(onClick = { showWaterfall = !showWaterfall }) {
                 Text(if (showWaterfall) "Hide spectrum" else "Spectrum")
+            }
+            FilledTonalButton(onClick = onToggleArHelix) {
+                Text(if (showArHelix) "Hide AR helix" else "AR helix")
             }
             FilledTonalButton(onClick = { showCalibrate = !showCalibrate }) {
                 Text("Calibrate")
