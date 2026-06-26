@@ -119,6 +119,7 @@ fun ArCoreScreen(viewModel: ArViewModel) {
             headingFrame = BearingFrame.ARCORE_SESSION,
             targetFrame = BearingFrame.SDR_ARRAY,
             modifier = Modifier.fillMaxSize(),
+            onSelectTrack = viewModel::selectTrack,
         )
         HudControls(
             orientation = orientation,

@@ -26,6 +26,7 @@ fun ArScreen(viewModel: ArViewModel) {
             headingFrame = BearingFrame.MAGNETIC_NORTH,
             targetFrame = BearingFrame.SDR_ARRAY,
             modifier = Modifier.fillMaxSize(),
+            onSelectTrack = viewModel::selectTrack,
         )
         HudControls(
             orientation = orientation,

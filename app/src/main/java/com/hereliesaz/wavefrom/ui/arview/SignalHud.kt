@@ -2,6 +2,7 @@ package com.hereliesaz.wavefrom.ui.arview
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +55,7 @@ fun SignalHud(
     headingFrame: BearingFrame,
     targetFrame: BearingFrame,
     modifier: Modifier = Modifier,
+    onSelectTrack: (String) -> Unit = {},
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat()
@@ -99,7 +101,7 @@ fun SignalHud(
                 widthPx = widthPx,
                 heightPx = heightPx,
             ) ?: return@forEach
-            BearingMarker(track, bearing.ambiguous, point.x, point.y, stalenessAlpha(track.ageMs(now)))
+            BearingMarker(track, bearing.ambiguous, point.x, point.y, stalenessAlpha(track.ageMs(now)), onSelectTrack)
         }
 
         val rssiTracks = tracks.filter { it.direction is Direction.RssiOnly }
@@ -108,6 +110,7 @@ fun SignalHud(
                 rssiTracks,
                 now,
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                onSelectTrack,
             )
         }
     }
@@ -149,7 +152,14 @@ private fun Track.bearingOrNull(): Bearing? = when (val d = direction) {
 }
 
 @Composable
-private fun BearingMarker(track: Track, ambiguous: Boolean, x: Float, y: Float, staleAlpha: Float) {
+private fun BearingMarker(
+    track: Track,
+    ambiguous: Boolean,
+    x: Float,
+    y: Float,
+    staleAlpha: Float,
+    onSelectTrack: (String) -> Unit,
+) {
     val color = Color(BandColor.argb(track.band))
     // Strong signals render larger.
     val radiusDp = ((track.smoothedPowerDbm + 90f) / 60f).coerceIn(0f, 1f) * 14f + 8f
@@ -157,7 +167,9 @@ private fun BearingMarker(track: Track, ambiguous: Boolean, x: Float, y: Float, 
         horizontalAlignment = Alignment.CenterHorizontally,
         // Measure the marker and place it centered on (x, y) in pixels, converting
         // the dp dot radius to px so it stays correct at any screen density.
-        modifier = Modifier.layout { measurable, constraints ->
+        modifier = Modifier
+            .clickable { onSelectTrack(track.id) }
+            .layout { measurable, constraints ->
             val placeable = measurable.measure(constraints)
             val radiusPx = radiusDp.dp.toPx()
             layout(placeable.width, placeable.height) {
@@ -189,7 +201,12 @@ private fun BearingMarker(track: Track, ambiguous: Boolean, x: Float, y: Float, 
 }
 
 @Composable
-private fun NearbyStrip(tracks: List<Track>, now: Long, modifier: Modifier = Modifier) {
+private fun NearbyStrip(
+    tracks: List<Track>,
+    now: Long,
+    modifier: Modifier = Modifier,
+    onSelectTrack: (String) -> Unit = {},
+) {
     Column(
         modifier
             .background(Color.Black.copy(alpha = 0.45f))
@@ -208,13 +225,13 @@ private fun NearbyStrip(tracks: List<Track>, now: Long, modifier: Modifier = Mod
                 .padding(top = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            tracks.take(24).forEach { NearbyChip(it, stalenessAlpha(it.ageMs(now))) }
+            tracks.take(24).forEach { NearbyChip(it, stalenessAlpha(it.ageMs(now)), onSelectTrack) }
         }
     }
 }
 
 @Composable
-private fun NearbyChip(track: Track, staleAlpha: Float) {
+private fun NearbyChip(track: Track, staleAlpha: Float, onSelectTrack: (String) -> Unit = {}) {
     val color = Color(BandColor.argb(track.band))
     val rssi = track.direction as? Direction.RssiOnly
     val label = rssi?.estimatedDistanceM?.let { fuzzyDistanceLabel(it, rssi.confidence) }
@@ -222,6 +239,7 @@ private fun NearbyChip(track: Track, staleAlpha: Float) {
     Row(
         Modifier
             .clip(RoundedCornerShape(12.dp))
+            .clickable { onSelectTrack(track.id) }
             .background(Color.White.copy(alpha = 0.08f * staleAlpha))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
