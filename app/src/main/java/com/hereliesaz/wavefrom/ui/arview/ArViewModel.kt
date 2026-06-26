@@ -69,6 +69,32 @@ class ArViewModel(app: Application) : AndroidViewModel(app) {
     /** Latest real IQ window from an SDR (on-phone USB or networked), for the 3D viewer. */
     val liveWaveform: StateFlow<IqFrame?> = WaveformBus.latest
 
+    // ---- Top-down map -----------------------------------------------------
+    /**
+     * The user's pose for the map, pushed by whichever camera screen is active:
+     * world [eye] position, the [sessionToTrueDeg] that rotates the world frame to
+     * true north (0 for the GPS/ENU frame), the true [headingDeg] the user faces,
+     * and the user's geographic position when a GPS origin exists.
+     */
+    data class MapPose(
+        val eye: com.hereliesaz.wavefrom.signal.model.Vec3 = com.hereliesaz.wavefrom.signal.model.Vec3.ZERO,
+        val sessionToTrueDeg: Float = 0f,
+        val headingDeg: Float = 0f,
+        val userGeo: com.hereliesaz.wavefrom.signal.localize.GeoPoint? = null,
+    )
+
+    private val _mapPose = MutableStateFlow(MapPose())
+    val mapPose: StateFlow<MapPose> = _mapPose.asStateFlow()
+
+    fun updateMapPose(
+        eye: com.hereliesaz.wavefrom.signal.model.Vec3,
+        sessionToTrueDeg: Float,
+        headingDeg: Float,
+        userGeo: com.hereliesaz.wavefrom.signal.localize.GeoPoint? = null,
+    ) {
+        _mapPose.value = MapPose(eye, sessionToTrueDeg, headingDeg, userGeo)
+    }
+
     // ---- Session record & replay -----------------------------------------
     private val sessionStore = SessionStore(app)
     private var recordingJob: Job? = null

@@ -49,8 +49,28 @@ class GpsPoseProvider {
         return Vec3(east.toFloat(), up.toFloat(), (-north).toFloat())
     }
 
+    /**
+     * Inverse of [toLocal]: a local world position back to geographic coordinates,
+     * or null before the origin is set. Lets a motion-estimated emitter (solved in
+     * the local frame) be reported as a real lat/lon on the map.
+     */
+    fun toGeo(local: Vec3): GeoPoint? {
+        if (lat0.isNaN()) return null
+        val east = local.x.toDouble()
+        val up = local.y.toDouble()
+        val north = -local.z.toDouble() // world z = -north
+        return GeoPoint(
+            latDeg = lat0 + north / DEG_TO_M,
+            lonDeg = lon0 + east / (DEG_TO_M * cosLat0),
+            altM = alt0 + up,
+        )
+    }
+
     private companion object {
         /** Metres per degree of latitude (mean Earth radius); longitude scaled by cos(lat0). */
         const val DEG_TO_M = 111_320.0
     }
 }
+
+/** A geographic coordinate (WGS84-ish, good enough for a few-km local frame). */
+data class GeoPoint(val latDeg: Double, val lonDeg: Double, val altM: Double)

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +22,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hereliesaz.wavefrom.ar.arcore.ArcoreMath
 import com.hereliesaz.wavefrom.ar.frame.BearingFrame
+import com.hereliesaz.wavefrom.ar.frame.CalibrationConfig
+import com.hereliesaz.wavefrom.ar.frame.FrameMath
 import com.hereliesaz.wavefrom.signal.localize.GpsPoseProvider
 import com.hereliesaz.wavefrom.signal.localize.Pose
 import com.hereliesaz.wavefrom.signal.model.Direction
@@ -85,6 +88,16 @@ fun ArScreen(viewModel: ArViewModel) {
             }
         }
         onDispose { listener?.let { lm?.removeUpdates(it) } }
+    }
+
+    // Push the user's pose to the top-down map: GPS/ENU is already true north, so the
+    // session→true rotation is 0; the user's lat/lon comes from the GPS origin.
+    LaunchedEffect(devicePos, orientation) {
+        val eye = devicePos ?: return@LaunchedEffect
+        val headingTrue = FrameMath.headingToTrue(
+            BearingFrame.MAGNETIC_NORTH, orientation.azimuthDeg, CalibrationConfig.state,
+        )
+        viewModel.updateMapPose(eye, 0f, headingTrue, gps.toGeo(eye))
     }
 
     // Project motion-estimated emitters to bearings from the current GPS position, so
