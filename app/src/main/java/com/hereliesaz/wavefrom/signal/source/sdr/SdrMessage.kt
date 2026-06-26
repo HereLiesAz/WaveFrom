@@ -42,4 +42,27 @@ sealed interface SdrMessage {
         val antennaCount: Int,
         val timestampMs: Long,
     ) : SdrMessage
+
+    /**
+     * A window of real captured IQ samples for the 3D helix viewer. [trackId] matches
+     * the emitter's [Bearing.trackId] when the SDR resolves direction, so the phone can
+     * attach it to that track; single-antenna sources use a standalone id.
+     */
+    data class Waveform(
+        val trackId: String,
+        val frequencyHz: Long,
+        val i: FloatArray,
+        val q: FloatArray,
+        val timestampMs: Long,
+    ) : SdrMessage {
+        override fun equals(other: Any?): Boolean =
+            this === other || (other is Waveform &&
+                trackId == other.trackId && frequencyHz == other.frequencyHz &&
+                timestampMs == other.timestampMs &&
+                i.contentEquals(other.i) && q.contentEquals(other.q))
+
+        override fun hashCode(): Int =
+            (((trackId.hashCode() * 31 + frequencyHz.hashCode()) * 31 +
+                timestampMs.hashCode()) * 31 + i.contentHashCode()) * 31 + q.contentHashCode()
+    }
 }

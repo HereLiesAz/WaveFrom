@@ -14,7 +14,26 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 
-from .protocol import Bearing, Spectrum
+from .protocol import Bearing, Spectrum, Waveform
+
+
+def decimate_iq(iq, track_id: str, freq_hz: float, n: int = 128) -> Waveform:
+    """Evenly subsample a complex IQ stream to ``n`` samples as a :class:`Waveform`.
+
+    The phone autoscales the helix, so amplitudes are passed through raw. This is a
+    visual, not a recording — keep ``n`` small to stay light on the link.
+    """
+    seq = list(iq)
+    total = len(seq)
+    take = min(n, total)
+    stride = max(1, total // take) if take else 1
+    sampled = seq[: take * stride : stride] if take else []
+    return Waveform(
+        track_id=track_id,
+        freq_hz=int(freq_hz),
+        i=[float(getattr(s, "real", s)) for s in sampled],
+        q=[float(getattr(s, "imag", 0.0)) for s in sampled],
+    )
 
 
 class SensorBackend(ABC):
@@ -36,6 +55,10 @@ class SensorBackend(ABC):
 
     def spectrum(self) -> Spectrum | None:
         """Optional power-per-bin snapshot for the waterfall. None if unsupported."""
+        return None
+
+    def waveform(self) -> Waveform | None:
+        """Optional decimated IQ window for the phone's 3D helix viewer. None if unsupported."""
         return None
 
 
@@ -113,6 +136,7 @@ class RtlSdrBackend(SensorBackend):
         self.nfft = int(nfft)
         self._sdr = None
         self._last_spectrum: Spectrum | None = None
+        self._last_waveform: Waveform | None = None
 
     @staticmethod
     def bearing_from_iq(iq_a, iq_b, freq_hz: float, spacing_m: float) -> tuple[float, float]:
@@ -152,10 +176,14 @@ class RtlSdrBackend(SensorBackend):
         )
         # Peaks are logged for now; single-antenna can't bearing them.
         detect_peaks(powers, freqs)
+        self._last_waveform = decimate_iq(iq, "rtl", self.center_freq)
         return []
 
     def spectrum(self) -> Spectrum | None:
         return self._last_spectrum
+
+    def waveform(self) -> Waveform | None:
+        return self._last_waveform
 
 
 def _covariance(channels: list[list[complex]], max_snapshots: int = 512):
@@ -206,6 +234,7 @@ class KrakenSdrBackend(SensorBackend):
         self.antenna_count = 5
         self._sock = None
         self._last_spectrum: Spectrum | None = None
+        self._last_waveform: Waveform | None = None
 
     @staticmethod
     def doa_from_channels(
@@ -272,10 +301,16 @@ class KrakenSdrBackend(SensorBackend):
         self._last_spectrum = Spectrum(
             start_hz=int(freq - fs / 2), bin_hz=int(fs / nfft), powers_dbm=powers
         )
+        # Tie the helix to the strongest peak (krk-0) so it lands on that bearing track.
+        track_id = bearings[0].track_id if bearings else "krk-0"
+        self._last_waveform = decimate_iq(channels[0], track_id, freq)
         return bearings
 
     def spectrum(self) -> Spectrum | None:
         return self._last_spectrum
+
+    def waveform(self) -> Waveform | None:
+        return self._last_waveform
 
 
 class WifiCsiBackend(SensorBackend):

@@ -66,6 +66,34 @@ class Spectrum:
         )
 
 
+@dataclass
+class Waveform:
+    """A window of real captured IQ samples for the phone's 3D IQ-helix viewer.
+
+    ``track_id`` matches the corresponding :class:`Bearing` when the SDR resolves
+    direction, so the phone attaches the helix to that emitter; single-antenna
+    sources use a standalone id. Decimate to ~128 samples before sending — this is a
+    visual, not a recording, and it shares the link with everything else.
+    """
+
+    track_id: str
+    freq_hz: int
+    i: list[float]
+    q: list[float]
+
+    def to_json(self, ts_ms: int | None = None) -> str:
+        return json.dumps(
+            {
+                "type": "waveform",
+                "trackId": self.track_id,
+                "freqHz": self.freq_hz,
+                "i": [round(v, 4) for v in self.i],
+                "q": [round(v, 4) for v in self.q],
+                "ts": ts_ms if ts_ms is not None else _now_ms(),
+            }
+        )
+
+
 def heartbeat(pod_id: str, antenna_count: int, ts_ms: int | None = None) -> str:
     return json.dumps(
         {

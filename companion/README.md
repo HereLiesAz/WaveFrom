@@ -28,8 +28,15 @@ Newline-delimited JSON over UDP (default port **50505**, matching
 ```json
 {"type":"bearing","trackId":"krk-7","freqHz":5800000000,"powerDbm":-61.2,
  "azimuthDeg":134.5,"elevationDeg":3.0,"confidence":0.82,"label":"5.8GHz FPV","ts":1719100000000}
+{"type":"spectrum","startHz":2400000000,"binHz":1000000,"powersDbm":[-100.0,-92.3],"ts":1719100000000}
+{"type":"waveform","trackId":"krk-0","freqHz":5800000000,"i":[0.0,0.7],"q":[0.7,0.0],"ts":1719100000000}
 {"type":"heartbeat","podId":"pi-roof","antennaCount":4,"ts":1719100000000}
 ```
+
+`waveform` carries a decimated window of real baseband IQ (≈128 samples, throttled to
+~2 Hz) that the phone renders as a 3D IQ helix. Its `trackId` matches the `bearing` it
+belongs to, so the helix lands on that located emitter; single-antenna sources (`rtl`)
+have no bearing and surface via the phone's "Live IQ" button instead.
 
 The Android decoder is `app/.../signal/source/sdr/WireProtocol.kt`; this package
 is the reference producer of the same contract.

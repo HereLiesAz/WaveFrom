@@ -4,6 +4,8 @@ import android.util.Log
 import com.hereliesaz.wavefrom.signal.model.Detection
 import com.hereliesaz.wavefrom.signal.model.SourceType
 import com.hereliesaz.wavefrom.signal.source.SignalSource
+import com.hereliesaz.wavefrom.signal.waveform.IqWindow
+import com.hereliesaz.wavefrom.signal.waveform.WaveformSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -61,6 +63,18 @@ class NetworkSdrSource(private val port: Int = DEFAULT_PORT) : SignalSource {
                     when (val msg = WireProtocol.decode(line)) {
                         is SdrMessage.Bearing -> trySend(WireProtocol.toDetection(msg))
                         is SdrMessage.Spectrum -> SpectrumBus.publish(msg)
+                        is SdrMessage.Waveform -> WaveformBus.publish(
+                            // Key by the aggregator's track id ("EXTERNAL_SDR:<trackId>") so the
+                            // viewer matches it to the located emitter; falls back to the Live-IQ
+                            // button for single-antenna sources that have no bearing track.
+                            IqFrame(
+                                sourceId = "${SourceType.EXTERNAL_SDR.name}:${msg.trackId}",
+                                label = msg.trackId,
+                                frequencyHz = msg.frequencyHz,
+                                window = IqWindow(msg.i, msg.q, WaveformSource.REAL),
+                                timestampMs = msg.timestampMs,
+                            ),
+                        )
                         else -> {} // heartbeat / unknown: ignore
                     }
                 }
