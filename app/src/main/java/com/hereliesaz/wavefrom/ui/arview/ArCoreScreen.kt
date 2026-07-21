@@ -81,6 +81,11 @@ fun ArCoreScreen(viewModel: ArViewModel) {
                         viewModel.localizer.onPose(
                             Pose(pos, ArcoreMath.forward(q), System.currentTimeMillis()),
                         )
+                        // Feed the top-down map: eye + session→true rotation + true heading.
+                        val headingTrue = FrameMath.headingToTrue(
+                            BearingFrame.ARCORE_SESSION, o.azimuthDeg, CalibrationConfig.state,
+                        )
+                        viewModel.updateMapPose(pos, CalibrationConfig.sessionToTrueNorthDeg, headingTrue)
                     },
                 ),
             )

@@ -63,6 +63,10 @@ hardware; every additional radio raises the localization tier it can reach.
   newline-delimited `.wfrec` file and replay it back through the same pipeline
   with original timing, so the overlay can be developed and demoed without live
   hardware. A replay banner keeps recorded data from being mistaken for live.
+- **Top-down map** — a north-up radar view of the same live tracks from a second
+  vantage point: located emitters as dots with breadcrumb trails, bearing-only
+  emitters as rays, RSSI-only emitters as range rings — each by honesty tier, never
+  faking a position. Located emitters get real lat/lon when a GPS origin is known.
 - **Companion pod** — a Raspberry Pi host (Python) that drives dongles/SDRs the
   phone can't, including HackRF via SoapySDR, and streams bearings + spectrum.
 - **Release** — signed release builds (AAB + APK) with programmatic per-build
