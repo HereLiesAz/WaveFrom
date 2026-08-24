@@ -103,6 +103,29 @@ class ProtocolTest(unittest.TestCase):
         # Emitters orbit, so azimuth advances between polls.
         self.assertNotEqual(first[0].azimuth_deg, second[0].azimuth_deg)
 
+    def test_simulator_occupancy_is_marked_synthetic(self):
+        sim = SimulatorBackend()
+        occ = sim.occupancy()
+        self.assertTrue(occ.synthetic)
+        self.assertEqual(occ.zone_id, "sim")
+
+    def test_simulator_occupancy_cycles_present_and_absent(self):
+        sim = SimulatorBackend()
+        # t=0: present, with real breathing/heart estimates.
+        present = sim.occupancy()
+        self.assertTrue(present.present)
+        self.assertIsNotNone(present.breathing_bpm)
+        self.assertIsNotNone(present.heart_bpm)
+        self.assertGreater(present.presence_confidence, 0.0)
+        # Advance past the 200-tick present half of the 400-tick cycle.
+        sim._t = 250
+        absent = sim.occupancy()
+        self.assertFalse(absent.present)
+        self.assertIsNone(absent.breathing_bpm)
+        self.assertIsNone(absent.heart_bpm)
+        self.assertEqual(absent.breathing_confidence, 0.0)
+        self.assertEqual(absent.heart_confidence, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
