@@ -15,11 +15,13 @@ def run(
     rate_hz: float = 10.0,
     heartbeat_secs: float = 2.0,
     waveform_secs: float = 0.5,
+    occupancy_secs: float = 1.0,
 ) -> None:
     """Stream until interrupted. Sends one batch of bearings per tick."""
     interval = 1.0 / rate_hz
     last_hb = 0.0
     last_wf = 0.0
+    last_occ = 0.0
     backend.start()
     try:
         while True:
@@ -36,6 +38,12 @@ def run(
                     if waveform is not None:
                         transport.send_line(waveform.to_json())
                     last_wf = start
+                # Breathing/heart rate change on the order of seconds, not ticks.
+                if start - last_occ >= occupancy_secs:
+                    occupancy = backend.occupancy()
+                    if occupancy is not None:
+                        transport.send_line(occupancy.to_json())
+                    last_occ = start
                 if start - last_hb >= heartbeat_secs:
                     transport.send_line(heartbeat(pod_id, backend.antenna_count))
                     last_hb = start

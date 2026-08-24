@@ -3,7 +3,7 @@ import json
 import unittest
 
 from wavefrom_pod.backends import BACKENDS, HackRfBackend, SimulatorBackend, decimate_iq
-from wavefrom_pod.protocol import Bearing, Spectrum, Waveform, heartbeat
+from wavefrom_pod.protocol import Bearing, Occupancy, Spectrum, Waveform, heartbeat
 
 
 class ProtocolTest(unittest.TestCase):
@@ -41,6 +41,25 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(d["freqHz"], 5800000000)
         self.assertEqual(d["i"], [0.0, 1.0, -0.5])
         self.assertEqual(d["q"], [1.0, 0.0, 0.5])
+        self.assertEqual(d["ts"], 1719100000000)
+
+    def test_occupancy_json_shape(self):
+        occ = Occupancy(
+            zone_id="pi-roof",
+            present=True,
+            presence_confidence=0.71,
+            breathing_bpm=14.2,
+            breathing_confidence=0.58,
+        )
+        d = json.loads(occ.to_json(ts_ms=1719100000000))
+        self.assertEqual(d["type"], "occupancy")
+        self.assertEqual(d["zoneId"], "pi-roof")
+        self.assertIs(d["present"], True)
+        self.assertEqual(d["presenceConfidence"], 0.71)
+        self.assertEqual(d["breathingBpm"], 14.2)
+        self.assertIsNone(d["heartBpm"])
+        self.assertEqual(d["heartConfidence"], 0.0)
+        self.assertIs(d["synthetic"], False)
         self.assertEqual(d["ts"], 1719100000000)
 
     def test_decimate_iq_subsamples_complex_stream(self):
