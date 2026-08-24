@@ -114,6 +114,28 @@ class SimulatorBackend(SensorBackend):
             powers.append(p)
         return Spectrum(start_hz, bin_hz, powers)
 
+    def occupancy(self) -> Occupancy:
+        """Synthetic presence/vitals reading, always `synthetic=True`.
+
+        Cycles present/absent every 200 ticks (~20s at the pod's default
+        10 Hz poll rate) so the phone's occupancy panel has something to
+        exercise without hardware: breathing ~14 BPM and heart rate ~68 BPM,
+        each with a slow wobble, while "present"; nothing while "absent".
+        """
+        present = (self._t % 400) < 200
+        breathing = 14.0 + 2.0 * math.sin(math.radians(self._t * 3)) if present else None
+        heart = 68.0 + 4.0 * math.sin(math.radians(self._t * 7)) if present else None
+        return Occupancy(
+            zone_id="sim",
+            present=present,
+            presence_confidence=0.9 if present else 0.05,
+            breathing_bpm=breathing,
+            breathing_confidence=0.8 if present else 0.0,
+            heart_bpm=heart,
+            heart_confidence=0.6 if present else 0.0,
+            synthetic=True,
+        )
+
 
 class RtlSdrBackend(SensorBackend):
     """Single RTL-SDR dongle: real IQ capture → power spectrum for the waterfall.
