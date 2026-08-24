@@ -60,6 +60,7 @@ fun HudControls(
 ) {
     var showWaterfall by remember { mutableStateOf(false) }
     var showCalibrate by remember { mutableStateOf(false) }
+    var showOccupancy by remember { mutableStateOf(false) }
 
     Box(modifier.fillMaxSize()) {
         if (showWaterfall) {
@@ -86,6 +87,9 @@ fun HudControls(
             FilledTonalButton(onClick = { showCalibrate = !showCalibrate }) {
                 Text("Calibrate")
             }
+            FilledTonalButton(onClick = { showOccupancy = !showOccupancy }) {
+                Text(if (showOccupancy) "Hide occupancy" else "Occupancy")
+            }
             // Record the live detection stream; replay the latest capture. A replay
             // banner makes it obvious the overlay is showing recorded, not live, data.
             FilledTonalButton(onClick = onToggleRecording) {
@@ -111,6 +115,9 @@ fun HudControls(
                 headingFrame = headingFrame,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
             )
+        }
+        if (showOccupancy) {
+            OccupancyPanel(modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
         }
         if (BuildConfig.DEBUG) {
             val lastResolve by CellDiagnostics.lastResolve.collectAsStateWithLifecycle()
