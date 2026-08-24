@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 
-from .protocol import Bearing, Spectrum, Waveform
+from .protocol import Bearing, Occupancy, Spectrum, Waveform
 
 
 def decimate_iq(iq, track_id: str, freq_hz: float, n: int = 128) -> Waveform:
@@ -59,6 +59,10 @@ class SensorBackend(ABC):
 
     def waveform(self) -> Waveform | None:
         """Optional decimated IQ window for the phone's 3D helix viewer. None if unsupported."""
+        return None
+
+    def occupancy(self) -> Occupancy | None:
+        """Optional room-level presence/vitals reading. None if unsupported."""
         return None
 
 
@@ -333,6 +337,7 @@ class WifiCsiBackend(SensorBackend):
         n_antennas: int = 3,
         spacing_m: float = 0.03,
         freq_hz: float = 2_437_000_000.0,
+        zone_id: str = "wificsi",
         **_: object,
     ) -> None:
         self.udp_port = udp_port
@@ -340,8 +345,16 @@ class WifiCsiBackend(SensorBackend):
         self.spacing_m = spacing_m
         self.freq_hz = freq_hz
         self.antenna_count = n_antennas
+        self.zone_id = zone_id
         self._sock = None
         self._groups: dict[int, dict] = {}
+        # A second, independent consumer of the same CSI matrix used for DoA
+        # above — see vitals.py. Fed every completed frame regardless of
+        # whether a bearing peak was found.
+        from .vitals import VitalsExtractor
+
+        self._vitals = VitalsExtractor()
+        self._vitals_frames = 0
 
     @staticmethod
     def doa_from_csi(
@@ -373,6 +386,7 @@ class WifiCsiBackend(SensorBackend):
 
     def poll(self) -> list[Bearing]:
         import socket
+        import time
 
         from .nexmon import MAGIC, parse_packet
 
@@ -400,6 +414,8 @@ class WifiCsiBackend(SensorBackend):
             matrix = [x[:width] for x in matrix]
             if width == 0:
                 continue
+            self._vitals.push(matrix, time.time())
+            self._vitals_frames += 1
             peaks = self.doa_from_csi(matrix, self.spacing_m, self.freq_hz, n_peaks=1)
             if peaks:
                 az, power = peaks[0]
@@ -421,6 +437,23 @@ class WifiCsiBackend(SensorBackend):
             for seq in list(self._groups)[:128]:
                 self._groups.pop(seq, None)
         return bearings
+
+    def occupancy(self) -> Occupancy | None:
+        """Room-level presence/vitals for this NIC's zone, or None before any
+        CSI has arrived — see [vitals.VitalsExtractor]."""
+        if self._vitals_frames == 0:
+            return None
+        estimate = self._vitals.estimate()
+        return Occupancy(
+            zone_id=self.zone_id,
+            present=estimate.present,
+            presence_confidence=estimate.presence_confidence,
+            breathing_bpm=estimate.breathing_bpm,
+            breathing_confidence=estimate.breathing_confidence,
+            heart_bpm=estimate.heart_bpm,
+            heart_confidence=estimate.heart_confidence,
+            synthetic=False,
+        )
 
 
 class BleBackend(SensorBackend):

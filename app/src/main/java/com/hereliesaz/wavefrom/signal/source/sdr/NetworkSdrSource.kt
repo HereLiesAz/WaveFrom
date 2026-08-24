@@ -63,6 +63,7 @@ class NetworkSdrSource(private val port: Int = DEFAULT_PORT) : SignalSource {
                     when (val msg = WireProtocol.decode(line)) {
                         is SdrMessage.Bearing -> trySend(WireProtocol.toDetection(msg))
                         is SdrMessage.Spectrum -> SpectrumBus.publish(msg)
+                        is SdrMessage.Occupancy -> OccupancyBus.publish(msg)
                         is SdrMessage.Waveform -> WaveformBus.publish(
                             // Key by the aggregator's track id ("EXTERNAL_SDR:<trackId>") so the
                             // viewer matches it to the located emitter; falls back to the Live-IQ

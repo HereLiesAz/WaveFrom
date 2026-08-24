@@ -65,4 +65,28 @@ sealed interface SdrMessage {
             (((trackId.hashCode() * 31 + frequencyHz.hashCode()) * 31 +
                 timestampMs.hashCode()) * 31 + i.contentHashCode()) * 31 + q.contentHashCode()
     }
+
+    /**
+     * A room-level presence/vitals reading for one sensing zone (whatever area
+     * the source NIC/array covers) — not a located emitter, so unlike [Bearing]
+     * it carries no frequency, power, or direction and never becomes a
+     * [com.hereliesaz.wavefrom.signal.model.Detection]. Every rate is paired
+     * with its own confidence and is `null` rather than a fabricated number
+     * when there wasn't enough signal to trust one. [synthetic] marks readings
+     * from a simulator so a demo can never be mistaken for a live measurement.
+     *
+     * Not a medical device: breathing/heart rate here are research-grade
+     * estimates from a single NIC, not a clinical measurement.
+     */
+    data class Occupancy(
+        val zoneId: String,
+        val present: Boolean,
+        val presenceConfidence: Float,
+        val breathingBpm: Float?,
+        val breathingConfidence: Float,
+        val heartBpm: Float?,
+        val heartConfidence: Float,
+        val synthetic: Boolean,
+        val timestampMs: Long,
+    ) : SdrMessage
 }

@@ -94,6 +94,48 @@ class Waveform:
         )
 
 
+@dataclass
+class Occupancy:
+    """A room-level presence/vitals reading for one sensing zone.
+
+    Unlike :class:`Bearing`, this describes a *zone* (whatever area the source
+    NIC/array covers), not a located emitter — no frequency, power, or
+    direction. Every rate is paired with its own confidence and is ``None``
+    rather than a fabricated number when there isn't enough signal to trust
+    one; ``synthetic`` marks readings from a simulator so they can never be
+    mistaken for a live measurement. See ADR/README notes on the CSI vitals
+    pipeline before surfacing these numbers as anything but a labeled
+    experiment — this is not a medical device.
+    """
+
+    zone_id: str
+    present: bool
+    presence_confidence: float
+    breathing_bpm: float | None = None
+    breathing_confidence: float = 0.0
+    heart_bpm: float | None = None
+    heart_confidence: float = 0.0
+    synthetic: bool = False
+
+    def to_json(self, ts_ms: int | None = None) -> str:
+        return json.dumps(
+            {
+                "type": "occupancy",
+                "zoneId": self.zone_id,
+                "present": self.present,
+                "presenceConfidence": round(self.presence_confidence, 3),
+                "breathingBpm": (
+                    None if self.breathing_bpm is None else round(self.breathing_bpm, 1)
+                ),
+                "breathingConfidence": round(self.breathing_confidence, 3),
+                "heartBpm": None if self.heart_bpm is None else round(self.heart_bpm, 1),
+                "heartConfidence": round(self.heart_confidence, 3),
+                "synthetic": self.synthetic,
+                "ts": ts_ms if ts_ms is not None else _now_ms(),
+            }
+        )
+
+
 def heartbeat(pod_id: str, antenna_count: int, ts_ms: int | None = None) -> str:
     return json.dumps(
         {

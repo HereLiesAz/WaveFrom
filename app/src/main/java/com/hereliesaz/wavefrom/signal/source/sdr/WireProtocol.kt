@@ -68,6 +68,19 @@ object WireProtocol {
                     timestampMs = ts,
                 )
             }
+            "occupancy" -> SdrMessage.Occupancy(
+                zoneId = json.optString("zoneId", "zone"),
+                present = json.optBoolean("present", false),
+                presenceConfidence = json.optDouble("presenceConfidence", 0.0).toFloat(),
+                breathingBpm = if (json.has("breathingBpm") && !json.isNull("breathingBpm"))
+                    json.optDouble("breathingBpm").toFloat() else null,
+                breathingConfidence = json.optDouble("breathingConfidence", 0.0).toFloat(),
+                heartBpm = if (json.has("heartBpm") && !json.isNull("heartBpm"))
+                    json.optDouble("heartBpm").toFloat() else null,
+                heartConfidence = json.optDouble("heartConfidence", 0.0).toFloat(),
+                synthetic = json.optBoolean("synthetic", false),
+                timestampMs = ts,
+            )
             else -> null
         }
     }
