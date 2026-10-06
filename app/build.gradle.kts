@@ -6,21 +6,14 @@ plugins {
 }
 
 // ---------------------------------------------------------------------------
-// Programmatic versioning (source of truth: version.properties).
-//   major/minor — edited by hand; bumping minor resets patch to 0.
-//   patch — +1 on every artifact build; resets when minor changes.
-//   build — +1 on every artifact build; NEVER resets → the Play versionCode.
-//   patchMinor — bookkeeping: the minor the current patch is counted within.
-//
+// Versioning (source of truth: version.properties, owned by HereLiesAz/workflows).
+//   The central android-play-release / android-github-release executors rewrite
+//   versionMajor/Minor/Patch/Build before building, and Play additionally passes
+//   -PversionCodeOverride / -PversionName (Play's next free versionCode), which win.
+//   Gradle never bumps or writes the file itself.
 // version.properties is read as a *tracked* configuration input (via providers),
-// so the configuration cache stays enabled: it is reused for tests/checks and is
-// correctly invalidated for the next artifact build (which changes the file). The
-// file is written from a task at execution time — never during configuration — so
-// there are no config-cache-hostile side effects in the configuration phase.
-// "Bump-then-use": an artifact build advances the counters for THIS build, so a
-// minor change shows its patch reset immediately.
+// so the configuration cache stays enabled.
 // ---------------------------------------------------------------------------
-val versionPropsFile = rootProject.file("version.properties")
 val versionProps = Properties().apply {
     val text = providers.fileContents(
         rootProject.layout.projectDirectory.file("version.properties"),
@@ -30,36 +23,15 @@ val versionProps = Properties().apply {
 fun versionInt(key: String, default: Int = 0) =
     (versionProps.getProperty(key) ?: "$default").trim().toInt()
 
-val verMajor = versionInt("major")
-val verMinor = versionInt("minor")
-val curPatch = versionInt("patch")
-val curBuild = versionInt("build")
-val curPatchMinor = versionInt("patchMinor", -1)
+val verMajor = versionInt("versionMajor")
+val verMinor = versionInt("versionMinor")
+val verPatch = versionInt("versionPatch")
+val verBuild = versionInt("versionBuild")
 
-val isArtifactBuild = gradle.startParameter.taskNames.any { name ->
-    val task = name.substringAfterLast(':').lowercase()
-    task.startsWith("assemble") || task.startsWith("bundle")
-}
-val verPatch = when {
-    !isArtifactBuild -> curPatch
-    curPatchMinor != verMinor -> 0 // minor changed → reset patch
-    else -> curPatch + 1
-}
-val verBuild = if (isArtifactBuild) curBuild + 1 else curBuild
-
-val computedVersionName = "$verMajor.$verMinor.$verPatch"
-val computedVersionCode = verBuild.coerceAtLeast(1) // Play requires versionCode >= 1
-
-// Persist the advanced counters at execution time (so configuration stays pure).
-// Wired into artifact builds only; CI commits the file back so the counter persists.
-val bumpVersion = tasks.register("bumpVersion") {
-    val out = versionPropsFile
-    val text = "major=$verMajor\nminor=$verMinor\npatch=$verPatch\nbuild=$verBuild\npatchMinor=$verMinor\n"
-    doLast { out.writeText(text) }
-}
-if (isArtifactBuild) {
-    tasks.named("preBuild").configure { dependsOn(bumpVersion) }
-}
+val computedVersionName = providers.gradleProperty("versionName").orNull
+    ?: "$verMajor.$verMinor.$verPatch"
+val computedVersionCode = (providers.gradleProperty("versionCodeOverride").orNull?.trim()?.toInt()
+    ?: verBuild).coerceAtLeast(1) // Play requires versionCode >= 1
 
 // CI reads the version straight from Gradle: `./gradlew -q printVersionName printVersionCode`.
 tasks.register("printVersionName") {
@@ -117,7 +89,8 @@ android {
             isMinifyEnabled = false
         }
         release {
-            isMinifyEnabled = false
+            // R8 on so the Play executor can upload mapping.txt for deobfuscation.
+            isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (hasReleaseKeystore) signingConfig = signingConfigs.getByName("release")
         }
