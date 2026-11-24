@@ -70,6 +70,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew test --continue --build-cache --no-daemon --stacktrace
+          ./gradlew :app:compileDebugKotlin -PazPlayUpdates=true --build-cache --no-daemon --stacktrace
 
       - name: Upload test reports
         if: always()

@@ -16,6 +16,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        checkAppUpdates(this)
         setContent {
             WaveFromTheme {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding()) {

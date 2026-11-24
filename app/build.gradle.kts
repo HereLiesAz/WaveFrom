@@ -43,6 +43,11 @@ tasks.register("printVersionCode") {
     doLast { println(code) }
 }
 
+// The central Play executor always supplies releaseVersionCode; the GitHub executor does not.
+// Local Play builds may opt in explicitly without introducing a second application flavor.
+val playUpdates = providers.gradleProperty("azPlayUpdates").map { it.toBooleanStrict() }
+    .orElse(providers.gradleProperty("releaseVersionCode").map { true }).orElse(false)
+
 android {
     namespace = "com.hereliesaz.wavefrom"
     compileSdk = 37
@@ -102,6 +107,10 @@ android {
     }
 
 
+    sourceSets.getByName("main").kotlin.srcDir(
+        if (playUpdates.get()) "src/playUpdates/kotlin" else "src/githubUpdates/kotlin"
+    )
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -116,6 +125,10 @@ android {
 }
 
 dependencies {
+    implementation("com.github.HereLiesAz.AzNavRail:aznavrail-updates:bfbbf1e9b89a7757a77d8607519d42b33422913d")
+    if (playUpdates.get()) {
+        implementation("com.github.HereLiesAz.AzNavRail:aznavrail-updates-play:bfbbf1e9b89a7757a77d8607519d42b33422913d")
+    }
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
 
