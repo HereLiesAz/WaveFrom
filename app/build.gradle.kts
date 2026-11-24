@@ -107,7 +107,7 @@ android {
     }
 
 
-    sourceSets.getByName("main").java.srcDir(
+    sourceSets.getByName("main").kotlin.srcDir(
         if (playUpdates.get()) "src/playUpdates/kotlin" else "src/githubUpdates/kotlin"
     )
 
