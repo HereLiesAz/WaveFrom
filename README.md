@@ -73,6 +73,14 @@ hardware; every additional radio raises the localization tier it can reach.
   versioning, published to GitHub releases and the Google Play internal track
   from CI.
 
+## Updates
+
+On startup, the shared AzNavRail update checker checks the installed distribution
+channel and offers newer stable releases. Play builds use the Play update API;
+GitHub builds have no Play update dependency. Debug builds skip checks. The
+central Play release workflow selects the Play adapter via `releaseVersionCode`;
+for a local Play build, pass `-PazPlayUpdates=true`.
+
 ## Build
 
 ```bash
