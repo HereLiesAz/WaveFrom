@@ -18,7 +18,7 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven {
-            url = uri("https://jitpack.io")
+            url = uri("https://raw.githubusercontent.com/HereLiesAz/AzNavRail/update-maven/")
             content { includeGroup("com.github.HereLiesAz.AzNavRail") }
         }
     }
